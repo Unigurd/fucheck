@@ -9,21 +9,21 @@ import System.Random (getStdGen, next, RandomGen)
 
 data Futhark_Context_Config
 foreign import ccall "futhark_context_config_new"
-  futhark_context_config_new :: IO (Ptr Futhark_Context_Config)
+  futNewConfig:: IO (Ptr Futhark_Context_Config)
 
 data Futhark_Context
 foreign import ccall "futhark_context_new"
-  futhark_context_new :: Ptr Futhark_Context_Config -> IO (Ptr Futhark_Context)
+  futNewContext :: Ptr Futhark_Context_Config -> IO (Ptr Futhark_Context)
 
-foreign import ccall "futhark_entry_test_entry"
-  futhark_entry_test_entry :: Ptr Futhark_Context -> Ptr Bool
+foreign import ccall "futhark_entry_runTest"
+  futEntry :: Ptr Futhark_Context -> Ptr Bool
                            -> Int32 -> IO ()
 
 foreign import ccall "futhark_context_free"
-  futhark_context_free :: Ptr Futhark_Context -> IO ()
+  futFreeContext :: Ptr Futhark_Context -> IO ()
 
 foreign import ccall "futhark_context_config_free"
-  futhark_context_config_free :: Ptr Futhark_Context_Config -> IO ()
+  futFreeConfig :: Ptr Futhark_Context_Config -> IO ()
 
 next32 :: RandomGen g => g -> (Int32, g)
 next32 g = (toEnum int, newGen)
@@ -35,7 +35,7 @@ myIterate f x = unfoldr (\x -> Just $ f x) x
 test :: Ptr Futhark_Context -> Int32 -> IO Bool
 test ctx seed =
   alloca $ (\res -> do 
-    futhark_entry_test_entry ctx res seed
+    futEntry ctx res seed
     peek res)
 
 testLoop :: RandomGen g => Ptr Futhark_Context -> Int -> g -> IO ([Bool])
@@ -48,8 +48,8 @@ testLoop ctx n gen = results
 
 main :: IO ()
 main = do
-  cfg <- futhark_context_config_new
-  ctx <- futhark_context_new cfg
+  cfg <- futNewConfig
+  ctx <- futNewContext cfg
 
   gen <- getStdGen
   
@@ -59,5 +59,5 @@ main = do
 
   putStrLn $ "Result " ++ show result
 
-  futhark_context_free ctx
-  futhark_context_config_free cfg
+  futFreeContext ctx
+  futFreeConfig cfg
