@@ -12,7 +12,7 @@ import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Array (mallocArray, peekArray)
 import Foreign.Storable (peek)
 import Data.List (unfoldr)
-import System.Random (getStdGen, next, RandomGen)
+import System.Random (randomIO, getStdGen, next, RandomGen)
 
 
 data Futhark_Context_Config
@@ -48,13 +48,14 @@ foreign import ccall
                        -> Ptr Word8         -- New array
                        -> IO Int32          -- Error info? Is this the right type?
 
+--(alloca :: (Ptr (Ptr Word8) -> (IO (Ptr Word8))) -> IO (Ptr Word8)) $ (\res -> do
 futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr Word8)
-futValues ctx futArr = do --(alloca :: (Ptr (Ptr Word8) -> (IO (Ptr Word8))) -> IO (Ptr Word8)) $ (\res -> do
+futValues ctx futArr = do 
       shape    <- futShape ctx futArr
-      (cArrPtr :: Ptr (Ptr (Word8))) <- mallocArray shape
-      cArr     <- peek cArrPtr
-      futhark_values_u8_1d ctx futArr cArr
-      peek cArrPtr--)
+      (cArrPtr :: Ptr Word8) <- mallocArray shape
+      --cArr     <- peek cArrPtr
+      futhark_values_u8_1d ctx futArr cArrPtr
+      return cArrPtr--)
 
 
 -- Get dimensions of fut array
@@ -90,22 +91,14 @@ main = do
   cfg <- futNewConfig
   ctx <- futNewContext cfg
 
-  gen <- getStdGen
-  --results <- testLoop ctx 100 gen 
-  --let result = all id results
+  gen <- randomIO
 
-  futResult <- futEntry ctx 87
+  futResult <- futEntry ctx gen
   cResult   <- futValues ctx futResult
   shape     <- futShape ctx futResult
   hsList    <- peekArray shape cResult
   let str   =  toString $ pack hsList
-  putStrLn $ show shape
   putStrLn $ str
-  --result <- futEntry ctx gen
-
-  --first <- futValuesArru8 ctx result 0
-
-  --putStrLn $ show first
 
   futFreeContext ctx
   futFreeConfig cfg
