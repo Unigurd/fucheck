@@ -66,6 +66,8 @@ foreign import ccall
 futShape :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO Int
 futShape ctx futArr = do
   shapePtr <- futhark_shape_u8_1d ctx futArr
+  putStrLn $ show futArr
+  putStrLn $ show shapePtr
   peek shapePtr
 
 -- Entry
@@ -76,20 +78,26 @@ foreign import ccall
                          -> Int32                   -- seed
                          -> IO (Int32)              -- Possibly error msg?
 
-futEntry :: Ptr Futhark_Context -> Int32 -> IO TmpResult
-futEntry ctx seed = result
-  where 
-    result =
-      alloca $ (\boolPtr -> do
-        str <- 
-          alloca $ (\strPtr -> do
-            futhark_entry_entrance ctx boolPtr strPtr seed
-            peek strPtr)
-        bool <- peek boolPtr
-        return $ if bool then TmpSuccess else TmpFailure str)
+futEntry :: Ptr Futhark_Context -> Int32 -> IO Result
+futEntry ctx seed = do
+  alloca $ (\boolPtr -> do
+    entryResult <- 
+      alloca $ (\strPtr -> do
+        flag <- futhark_entry_entrance ctx boolPtr strPtr seed
+        if flag == 0
+        then (return . Right) =<< peek strPtr
+        else return $ Left flag
+        )
 
-data TmpResult = TmpSuccess | TmpFailure (Ptr (Futhark_u8_1d))
-data Result    = Success    | Failure    (Ptr (Futhark_u8_1d)) Int32 
+    case entryResult of
+      Left flag -> return $ Exception flag seed
+      Right str -> do
+        bool <- peek boolPtr
+        return $ if bool then Success else Failure str seed)
+
+data Result = Success
+            | Failure (Ptr (Futhark_u8_1d)) Int32 -- Error message and seed
+            | Exception Int32 Int32               -- Error flag and seed
 
 main :: IO ()
 main = do
@@ -97,14 +105,26 @@ main = do
   ctx <- futNewContext cfg
 
   gen <- getStdGen
+  tmpSeed <- randomIO
 
-  let tests = testLoop ctx gen
-  result <- doTests 100 tests
-  case result of
-    Success -> putStrLn "Success!"
+  res <- futEntry ctx  tmpSeed
+  case res of
+    Success -> putStrLn "Success"
     Failure futStr seed -> do
       str <- futValues ctx futStr
       putStrLn $ "Failure with input " ++ str ++ " from seed " ++ show seed
+    Exception flag seed -> putStrLn ("Futhark crashed with flag " ++ show flag ++ " from seed " ++ show seed)
+
+  --let tests = testLoop ctx gen
+  --putStrLn "foer doTests"
+  --result <- doTests 100 tests
+  --putStrLn "efter doTests"
+  --case result of
+  --  Success -> putStrLn "Success!"
+  --  Failure futStr seed -> do
+  --    str <- futValues ctx futStr
+  --    putStrLn "efter futValues"
+  --    putStrLn $ "Failure with input " ++ str ++ " from seed " ++ show seed
       
 
   futFreeContext ctx
@@ -119,16 +139,12 @@ doTests n ios = do
   results <- sequence $ take n ios
   return $ foldl coalesce Success results
 
-addSeed :: Int32 -> TmpResult -> Result
-addSeed _ TmpSuccess       = Success
-addSeed n (TmpFailure str) = Failure str n
-
 testLoop :: RandomGen g => Ptr Futhark_Context -> g -> [IO Result]
 testLoop ctx gen = results
   where
     seeds      = myIterate next32 gen
-    tmpResults = map (futEntry ctx) seeds
-    results    = map (\(tmpRes,seed) -> addSeed seed <$> tmpRes) $ zip tmpResults seeds
+    results = map (futEntry ctx) seeds
+    --results    = map (\(tmpRes,seed) -> addSeed seed <$> tmpRes) $ zip tmpResults seeds
   
 next32 :: RandomGen g => g -> (Int32, g)
 next32 g = (toEnum int, newGen)
