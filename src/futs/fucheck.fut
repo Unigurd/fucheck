@@ -16,6 +16,6 @@ let runTest 't (arbitrary : minstd_rand.rng -> t) (property : t -> bool) (seed :
   in property (arbitrary gen)
 
  --let (rng, x) = dist.rand (1,6) rng
-entry entrance (seed : i32) : []u8 = "HejæøåÆØÅ med digÆ"
+entry entrance (seed : i32) : (bool, []u8) = (false, "HejæøåÆØÅ med digÆ")
 
 --entry entrance (seed : i32) : bool = runTest arbitrary property seed

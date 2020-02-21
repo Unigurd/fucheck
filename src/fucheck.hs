@@ -72,19 +72,24 @@ futShape ctx futArr = do
 -- Entry
 foreign import ccall 
   futhark_entry_entrance :: Ptr Futhark_Context
-                         -> Ptr (Ptr Futhark_u8_1d) -- result
+                         -> Ptr Bool                -- succeeded?
+                         -> Ptr (Ptr Futhark_u8_1d) -- string
                          -> Int32                   -- seed
                          -> IO (Int32)              -- Possibly error msg?
 
-futEntry :: Ptr Futhark_Context -> Int32 -> IO (Ptr Futhark_u8_1d)
-futEntry ctx seed = futArr
+futEntry :: Ptr Futhark_Context -> Int32 -> IO (Result (Ptr Futhark_u8_1d))
+futEntry ctx seed = result
   where 
-    futArr =
-      alloca $ (\res -> do
-        futhark_entry_entrance ctx res seed
-        peek res)
+    result =
+      alloca $ (\boolPtr -> do
+        str <- 
+          alloca $ (\strPtr -> do
+            futhark_entry_entrance ctx boolPtr strPtr seed
+            peek strPtr)
+        bool <- peek boolPtr
+        return $ if bool then Success else Failure str)
 
-
+data Result a = Success | Failure a
 
 main :: IO ()
 main = do
@@ -94,11 +99,14 @@ main = do
   gen <- randomIO
 
   futResult <- futEntry ctx gen
-  cResult   <- futValues ctx futResult
-  shape     <- futShape ctx futResult
-  hsList    <- peekArray shape cResult
-  let str   =  toString $ pack hsList
-  putStrLn $ str
+  case futResult of
+    Success -> putStrLn "Success!"
+    Failure str -> do
+      cResult   <- futValues ctx str
+      shape     <- futShape ctx str
+      hsList    <- peekArray shape cResult
+      let str   =  toString $ pack hsList
+      putStrLn $ str
 
   futFreeContext ctx
   futFreeConfig cfg
