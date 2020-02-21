@@ -76,7 +76,7 @@ foreign import ccall
                          -> Int32                   -- seed
                          -> IO (Int32)              -- Possibly error msg?
 
-futEntry :: Ptr Futhark_Context -> Int32 -> IO (Result (Ptr Futhark_u8_1d))
+futEntry :: Ptr Futhark_Context -> Int32 -> IO TmpResult
 futEntry ctx seed = result
   where 
     result =
@@ -86,35 +86,49 @@ futEntry ctx seed = result
             futhark_entry_entrance ctx boolPtr strPtr seed
             peek strPtr)
         bool <- peek boolPtr
-        return $ if bool then Success else Failure str)
+        return $ if bool then TmpSuccess else TmpFailure str)
 
-data Result a = Success | Failure a
+data TmpResult = TmpSuccess | TmpFailure (Ptr (Futhark_u8_1d))
+data Result    = Success    | Failure    (Ptr (Futhark_u8_1d)) Int32 
 
 main :: IO ()
 main = do
   cfg <- futNewConfig
   ctx <- futNewContext cfg
 
-  gen <- randomIO
+  gen <- getStdGen
 
-  futResult <- futEntry ctx gen
-  case futResult of
+  let tests = testLoop ctx gen
+  result <- doTests 100 tests
+  case result of
     Success -> putStrLn "Success!"
-    Failure futStr -> do
+    Failure futStr seed -> do
       str <- futValues ctx futStr
-      putStrLn $ str
+      putStrLn $ "Failure with input " ++ str ++ " from seed " ++ show seed
       
 
   futFreeContext ctx
   futFreeConfig cfg
 
+coalesce Success Success = Success
+coalesce Success failure = failure
+coalesce failure _       = failure
 
---testLoop :: RandomGen g => Ptr Futhark_Context -> Int -> g -> IO ([Bool])
---testLoop ctx n gen = results
---  where
---    seeds = myIterate next32 gen
---    ios = map (futEntry ctx) seeds
---    results = sequence $ take n ios
+doTests :: Int -> [IO Result] -> IO Result
+doTests n ios = do
+  results <- sequence $ take n ios
+  return $ foldl coalesce Success results
+
+addSeed :: Int32 -> TmpResult -> Result
+addSeed _ TmpSuccess       = Success
+addSeed n (TmpFailure str) = Failure str n
+
+testLoop :: RandomGen g => Ptr Futhark_Context -> g -> [IO Result]
+testLoop ctx gen = results
+  where
+    seeds      = myIterate next32 gen
+    tmpResults = map (futEntry ctx) seeds
+    results    = map (\(tmpRes,seed) -> addSeed seed <$> tmpRes) $ zip tmpResults seeds
   
 next32 :: RandomGen g => g -> (Int32, g)
 next32 g = (toEnum int, newGen)
