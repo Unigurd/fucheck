@@ -9,7 +9,7 @@ import Data.Int  (Int32, Int64)
 import Data.Word (Word8)
 import Foreign.Ptr (Ptr)
 import Foreign.Marshal.Alloc (alloca)
-import Foreign.Marshal.Array (mallocArray, peekArray)
+import Foreign.Marshal.Array (allocaArray, peekArray)
 import Foreign.Storable (peek)
 import Data.List (unfoldr)
 import System.Random (randomIO, getStdGen, next, RandomGen)
@@ -48,15 +48,14 @@ foreign import ccall
                        -> Ptr Word8         -- New array
                        -> IO Int32          -- Error info? Is this the right type?
 
---(alloca :: (Ptr (Ptr Word8) -> (IO (Ptr Word8))) -> IO (Ptr Word8)) $ (\res -> do
-futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr Word8)
-futValues ctx futArr = do 
-      shape    <- futShape ctx futArr
-      (cArrPtr :: Ptr Word8) <- mallocArray shape
-      --cArr     <- peek cArrPtr
-      futhark_values_u8_1d ctx futArr cArrPtr
-      return cArrPtr--)
-
+futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (String)
+futValues ctx futArr = do
+  shape <- futShape ctx futArr
+  allocaArray shape (\cArr -> do
+    futhark_values_u8_1d ctx futArr cArr
+    hsList <- peekArray shape cArr
+    return $ decode hsList
+    )
 
 -- Get dimensions of fut array
 foreign import ccall 
@@ -101,12 +100,10 @@ main = do
   futResult <- futEntry ctx gen
   case futResult of
     Success -> putStrLn "Success!"
-    Failure str -> do
-      cResult   <- futValues ctx str
-      shape     <- futShape ctx str
-      hsList    <- peekArray shape cResult
-      let str   =  toString $ pack hsList
+    Failure futStr -> do
+      str <- futValues ctx futStr
       putStrLn $ str
+      
 
   futFreeContext ctx
   futFreeConfig cfg
