@@ -42,6 +42,15 @@ let zipTest [n] ((as,bs) : ([n]i32,[n]i32)) = (as,bs) == unzip (zip as bs)
 let zipShow _ : []u8 = "not implemented"
 
 
+let stupidGeni32 gen0 =
+  let (gen1, i1) = geni32range (0,100) gen0
+  let (_,    i2) = geni32range (0,100) gen1
+  in (i1,i2)
+
+let stupidTest ((i1,i2) : (i32,i32)) = i1 != i2
+
+let stupidShow (i1,i2) = "ikke implementerET"
+
 --
 -- Entry stuff
 --
@@ -58,4 +67,7 @@ let runTest 't
   in (result, if result then "" else show input)
 
 
-entry entrance (seed : i32) : (bool, []u8) = runTest zipGeni32 zipTest zipShow seed
+let fullZip (seed : i32) : (bool, []u8) = runTest zipGeni32 zipTest zipShow seed
+let fullStupid (seed : i32) : (bool, []u8) = runTest stupidGeni32 stupidTest stupidShow seed
+
+entry entrance = fullStupid

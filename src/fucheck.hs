@@ -66,8 +66,6 @@ foreign import ccall
 futShape :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO Int
 futShape ctx futArr = do
   shapePtr <- futhark_shape_u8_1d ctx futArr
-  putStrLn $ show futArr
-  putStrLn $ show shapePtr
   peek shapePtr
 
 -- Entry
@@ -105,27 +103,16 @@ main = do
   ctx <- futNewContext cfg
 
   gen <- getStdGen
-  tmpSeed <- randomIO
 
-  res <- futEntry ctx  tmpSeed
-  case res of
+  let tests = testLoop ctx gen
+  result <- doTests 100 tests
+
+  case result of
     Success -> putStrLn "Success"
     Failure futStr seed -> do
       str <- futValues ctx futStr
       putStrLn $ "Failure with input " ++ str ++ " from seed " ++ show seed
     Exception flag seed -> putStrLn ("Futhark crashed with flag " ++ show flag ++ " from seed " ++ show seed)
-
-  --let tests = testLoop ctx gen
-  --putStrLn "foer doTests"
-  --result <- doTests 100 tests
-  --putStrLn "efter doTests"
-  --case result of
-  --  Success -> putStrLn "Success!"
-  --  Failure futStr seed -> do
-  --    str <- futValues ctx futStr
-  --    putStrLn "efter futValues"
-  --    putStrLn $ "Failure with input " ++ str ++ " from seed " ++ show seed
-      
 
   futFreeContext ctx
   futFreeConfig cfg
