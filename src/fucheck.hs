@@ -131,12 +131,10 @@ testLoop ctx gen = results
   where
     seeds      = myIterate next32 gen
     results = map (futEntry ctx) seeds
-    --results    = map (\(tmpRes,seed) -> addSeed seed <$> tmpRes) $ zip tmpResults seeds
-  
+
 next32 :: RandomGen g => g -> (Int32, g)
 next32 g = (toEnum int, newGen)
   where (int,newGen) = next g
 
 myIterate :: (a -> (b,a)) -> a -> [b]
 myIterate f x = unfoldr (\x -> Just $ f x) x
-
