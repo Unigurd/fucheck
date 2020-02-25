@@ -8,3 +8,6 @@ Does there already exists a way to decompose an int to an array of digits?
 Which organization of files would be most convenient?
 How to get a C array from an opaque futhark type in Haskell
 What about Storable opaque types?
+any way to write generic code for a type that "implements" a module?
+How do I best write generators? How can I avoid having to supply an eq?
+best way to shrink arrays?
