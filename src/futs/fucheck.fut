@@ -171,8 +171,11 @@ let shrinktogether 's 't
   -- Tries shrinking each argument separately. For simplicity
   let n = countshrunk shrink1 data1 -- slow, might be moved
   in if i < n then bind (shrink1 data1 i) (\data1 -> #just (data1, data2)) else
+  let i = i - n
   let m = countshrunk shrink2 data2
-  in if i < n + m then bind (shrink2 data2 i) (\data2 -> #just (data1, data2)) else
+  in if i < m then bind (shrink2 data2 i) (\data2 -> #just (data1, data2)) else
+  if n == 0 || m == 0 then #nothing else
+  let i = i - m
   let shrunk1 = shrink1 data1 (i/m)
   let shrunk2 = shrink2 data2 (i%m)
   in match (shrunk1, shrunk2)
