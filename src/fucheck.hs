@@ -70,7 +70,7 @@ futShape ctx futArr = do
 
 -- Entry
 foreign import ccall 
-  futhark_entry_entrance :: Ptr Futhark_Context
+  futhark_entry_main :: Ptr Futhark_Context
                          -> Ptr Bool                -- succeeded?
                          -> Ptr (Ptr Futhark_u8_1d) -- string
                          -> Int32                   -- seed
@@ -81,21 +81,21 @@ futEntry ctx seed = do
   alloca $ (\boolPtr -> do
     entryResult <- 
       alloca $ (\strPtr -> do
-        flag <- futhark_entry_entrance ctx boolPtr strPtr seed
-        if flag == 0
+        exitCode <- futhark_entry_main ctx boolPtr strPtr seed
+        if exitCode == 0
         then (return . Right) =<< peek strPtr
-        else return $ Left flag
+        else return $ Left exitCode
         )
 
     case entryResult of
-      Left flag -> return $ Exception flag seed
+      Left exitCode -> return $ Exception exitCode seed
       Right str -> do
         bool <- peek boolPtr
         return $ if bool then Success else Failure str seed)
 
 data Result = Success
             | Failure (Ptr (Futhark_u8_1d)) Int32 -- Error message and seed
-            | Exception Int32 Int32               -- Error flag and seed
+            | Exception Int32 Int32               -- Error exitCode and seed
 
 main :: IO ()
 main = do
@@ -112,7 +112,7 @@ main = do
     Failure futStr seed -> do
       str <- futValues ctx futStr
       putStrLn $ "Failure with input " ++ str ++ " from seed " ++ show seed
-    Exception flag seed -> putStrLn ("Futhark crashed with flag " ++ show flag ++ " from seed " ++ show seed)
+    Exception exitCode seed -> putStrLn ("Futhark crashed with exit code " ++ show exitCode ++ " from seed " ++ show seed)
 
   futFreeContext ctx
   futFreeConfig cfg
