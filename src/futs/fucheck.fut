@@ -6,7 +6,11 @@ type result = #success | #failure i32
 type gen = minstd_rand.rng
 type maybe 'a = #just a | #nothing
 
-let isSomething 't (maybe : maybe t) = match maybe
+let bind 'a 'b (m : maybe a) (f : a -> maybe b) : maybe b = match m
+  case #just a  -> f a
+  case #nothing -> #nothing
+
+let isJust 't (maybe : maybe t) = match maybe
   case #just _  -> true
   case #nothing -> false
 
@@ -108,10 +112,10 @@ let num2str prefix stringify base num =
   let (sign, digits) = digify base num
   in showSign sign ++ prefix ++ (map stringify digits)
 
-let showdecimali32 num = num2str ""   showBase36 10 num
-let showhexi32     num = num2str "0x" showBase36 16 num
-let showoctali32   num = num2str "0o" showBase36 8  num
-let showbinaryi32  num = num2str "0b" showBase36 2  num
+let showdecimali32 = num2str ""   showBase36 10
+let showhexi32     = num2str "0x" showBase36 16
+let showoctali32   = num2str "0o" showBase36 8
+let showbinaryi32  = num2str "0b" showBase36 2
 
 -- Hvorfor brokker foldl sig over at resultatet ikke har samme stoerrelse som "" ?
 --let separatewith separator stringify strs : []u8 = foldl (\x y -> x ++ separator ++ stringify y) "" strs
@@ -151,21 +155,68 @@ let showArray stringify strs = showCollection "[" ", " "]" stringify strs
 --            (False, True)  -> a + b > 0
 
 
+let countshrunk shrink data =
+  loop i = 0 while isJust (shrink data i) do i + 1
+
+let augmentShrink 'a augmentation shrink data i : maybe a =
+  if i == 0 then augmentation else shrink data (i-1)
+
+-- Tries all shrinking combinations of (data1, data2) based on the supplied shrinks of a and b
+let shrinktogether 's 't
+                   (shrink1 : s -> i32 -> maybe s)
+                   (shrink2 : t -> i32 -> maybe t)
+                   ((data1, data2) : (s, t))
+                   (i : i32) 
+                   : maybe (s, t) =
+  -- Tries shrinking each argument separately. For simplicity
+  let n = countshrunk shrink1 data1 -- slow, might be moved
+  in if i < n then bind (shrink1 data1 i) (\data1 -> #just (data1, data2)) else
+  let m = countshrunk shrink2 data2
+  in if i < n + m then bind (shrink2 data2 i) (\data2 -> #just (data1, data2)) else
+  let shrunk1 = shrink1 data1 (i/m)
+  let shrunk2 = shrink2 data2 (i%m)
+  in match (shrunk1, shrunk2)
+     case (#just shrunk1, #just shrunk2)
+       -> #just (shrunk1, shrunk2)
+     case (_, _)  -> #nothing
+
+--
+--  -- If we cannot shrink data2 we handle it separately,
+--  -- as we need to divide by n later
+--  in if n == 0 then bind (shrink1 data1 i) (\data1 -> #just (data1, data2)) else
+--  -- Adds the identity as the first attempted shrinking
+--  -- So we also try only shrinking 1 argument
+--  let shrink1 = augmentShrink (#just data1) shrink1
+--  let shrink2 = augmentShrink (#just data2) shrink2
+--  -- Increase i so i = 0 won't 
+--  -- leave both data1 and data2 unchanged
+--  let i = i + 1
+--  let maybeshrunk1 = shrink1 data1 (i/(n+1))
+--  let maybeshrunk2 = shrink2 data2 (i%(n+1))
+--  in match (maybeshrunk1, maybeshrunk2)
+--     case (#just shrunk1, #just shrunk2)
+--       -> #just (shrunk1, shrunk2)
+--     case (_, _)  -> #nothing
+
+
+let naiveshrinki32 (data :i32) (i : i32) : maybe i32 =
+  let shrunk = data - data / (2**(i-1))
+  in if (data < 0  && data >= shrunk)
+     || (data >= 0 && data <= shrunk)
+     then #nothing
+     else #just shrunk
+
+  
 
 let shrinki32 (data : i32) (i : i32) : maybe i32 =
-  -- Don't negate if data is positive
-  -- or the lowest possible value,
-  -- since -(i32.lowest) = i32.highest + 1,
-  -- so it can't be negated
-  let i = if data >= 0 || data == i32.lowest then i + 1 else i
-  in match i
-     case 0 -> #just (-data)
-     case 1 -> #just 0
-     case _ -> let shrunk = data - data / (2**(i-1))
-               in if (data < 0  && data >= shrunk)
-                  || (data >= 0 && data <= shrunk)
-                  then #nothing
-                  else #just shrunk
+  -- if data is 0 we shrink it naively
+  if data == 0 then naiveshrinki32 data i
+  -- otherwise we also try shrinking data to 0 as the first thing.
+  else let shrink = augmentShrink (#just 0) naiveshrinki32
+       in if data > 0 then shrink data i
+          -- if data is negative, we also try negating it first
+          else augmentShrink (#just (-data)) shrink data i
+
 
 --
 -- Tests
@@ -182,6 +233,7 @@ let zipTest [n] ((as,bs) : ([n]i32,[n]i32)) = (as,bs) == unzip (zip as bs)
 let zipShow _ : []u8 = "not implemented"
 
 
+
 let stupidGeni32 gen =
   let (gen, i1) = geni32range (-100,00) gen
   let (_,   i2) = geni32range (-100,00) gen
@@ -190,6 +242,10 @@ let stupidGeni32 gen =
 let stupidTest ((i1,i2) : (i32,i32)) = i1 != i2
 
 let stupidShow (i1,i2) = show2tuple (showdecimali32 i1) (showdecimali32 i2)
+
+
+let stupidShrink = shrinktogether shrinki32 shrinki32
+
 
 let isZeroGen gen = let (_, i) = geni32range (-100,100) gen in i
 let isZeroTest (i : i32) = i == 0
@@ -200,28 +256,36 @@ let isZeroTest (i : i32) = i == 0
 -- Entry stuff
 --
 
+let it 't
+        (property : t -> bool)
+        (shrink : t -> i32 -> maybe t)
+        ((smallest, input, i) : (t, maybe t, i32))
+        : (t, maybe t, i32) =
+  match input
+    -- This case should never be reached because of the loop condition
+    case #nothing -> (smallest, #nothing, i)
+    case #just inputVal ->
+      match shrink inputVal i
+      -- We cannot shrink any further
+      case #nothing -> (smallest, #nothing, i)
+      case #just shrunk ->
+        if property shrunk
+        -- if the property holds we'll try shrinking further on the same input
+        then (smallest, input, i + 1) 
+        -- if the property doesn't hold, we'll shrink on the new, smaller input
+        else (shrunk, #just shrunk, 0)
+
+let bla p s (x,i) = it p s (x, #just x, i)
 
 let shrinker 't 
              (property : t -> bool)
              (shrink : t -> i32 -> maybe t)
              (input : t)
              : t =
-  let (shrunkinput, _, _) = 
-    loop (smallest, current, i) = (input, #just input, 0)
-    while isSomething current
-    do match current
-       -- This case should never be reached because of the loop condition
-       case #nothing -> (smallest, current, i)
-       case #just currentVal ->
-         match shrink currentVal i
-         -- We cannot shrink any further
-         case #nothing -> (smallest, #nothing, i)
-         case #just shrunk ->
-           if property shrunk
-           -- if the property holds we'll try shrinking further on the same input
-           then (smallest, current, i + 1) 
-           -- if the property doesn't hold, we'll shrink on the new, smaller input
-           else (shrunk, #just shrunk, 0)
+  let (shrunkinput, _, _) = iterate_while (\(_,y,_) -> isJust y) (it property shrink) (input, #just input, 0)
+--    loop (smallest, input, i) = (input, #just input, 0)
+--    while isJust input
+--    do it property shrink (smallest, input, i)
   in shrunkinput
 
 let runTest 't 
@@ -240,7 +304,12 @@ let runTest 't
   --loop i = 1 while (factor ** i) <= n do i + 1
 
 --let fullZip (seed : i32) : (bool, []u8) = runTest zipGeni32 zipTest zipShow seed
---let fullStupid (seed : i32) : (bool, []u8) = runTest stupidGeni32 stupidTest stupidShow seed
-let fullisZero (seed : i32) : (bool, []u8) = runTest isZeroGen isZeroTest showdecimali32 shrinki32 seed
+let fullStupid (seed : i32) : (bool, []u8) = runTest stupidGeni32 stupidTest stupidShow stupidShrink seed
+let fullIsZero (seed : i32) : (bool, []u8) = runTest isZeroGen isZeroTest showdecimali32 shrinki32 seed
 
-entry main = fullisZero
+entry main = fullStupid
+
+
+
+
+let stoop = shrinker stupidTest stupidShrink
