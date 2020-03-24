@@ -2,6 +2,7 @@ import "lib/github.com/diku-dk/cpprandom/random"
 module dist = uniform_int_distribution i32 minstd_rand
 
 
+type testdata 't = #testdata t
 type result = #success | #failure i32
 type gen = minstd_rand.rng
 type maybe 'a = #just a | #nothing
@@ -96,7 +97,7 @@ let showSign (sign : sign) = match sign
   case #positive -> ""
   case #negative -> "-"
 
-entry digify base n : (sign, []i32) = 
+let digify base n : (sign, []i32) = 
   (if n < 0 then #negative else #positive,
   let n = i32.abs n
   let digitNr = glp base n
@@ -237,21 +238,27 @@ let zipShow _ : []u8 = "not implemented"
 
 
 
-let stupidGeni32 gen =
+let stupidGeni32 gen : testdata (i32, i32)=
   let (gen, i1) = geni32range (-100,00) gen
   let (_,   i2) = geni32range (-100,00) gen
-  in (i1,i2)
+  in #testdata (i1,i2)
 
-let stupidTest ((i1,i2) : (i32,i32)) = i1 != i2
+let stupidTest (input : testdata (i32,i32)) = match input
+  case #testdata (i1, i2) -> i1 != i2
 
-let stupidShow (i1,i2) = show2tuple (showdecimali32 i1) (showdecimali32 i2)
+let stupidShow (input : testdata (i32, i32)) = match input
+  case #testdata (i1,i2) -> show2tuple (showdecimali32 i1) (showdecimali32 i2)
 
 
 let stupidShrink = shrinktogether shrinki32 shrinki32
 
 
-let isZeroGen gen = let (_, i) = geni32range (-100,100) gen in i
-let isZeroTest (i : i32) = i == 0
+let isZeroShow (input : testdata i32) : []u8 = match input
+  case #testdata m -> showdecimali32 m
+
+let isZeroGen gen : testdata i32= let (_, i) = geni32range (-100,100) gen in #testdata i
+let isZeroTest (input : testdata i32) = match input
+  case #testdata i -> i == 0
 
 
 
@@ -295,24 +302,26 @@ let runTest 't
             (arbitrary : minstd_rand.rng -> t)
             (property : t -> bool)
             (show : t -> []u8)
-            (shrink : t -> i32 -> maybe t)
+--            (shrink : t -> i32 -> maybe t)
             (seed : i32) : 
             (bool,[]u8) =
   let gen          = minstd_rand.rng_from_seed [seed]
   let input        = arbitrary gen
   let result       = property input
-  let shrunkInput = if result then input else shrinker property shrink input
-  in (result, if result then "" else show shrunkInput)
+  --let shrunkInput = if result then input else shrinker property shrink input
+  in (result, if result then "" else show input)
 
   --loop i = 1 while (factor ** i) <= n do i + 1
 
 --let fullZip (seed : i32) : (bool, []u8) = runTest zipGeni32 zipTest zipShow seed
-let fullStupid (seed : i32) : (bool, []u8) = runTest stupidGeni32 stupidTest stupidShow stupidShrink seed
-let fullIsZero (seed : i32) : (bool, []u8) = runTest isZeroGen isZeroTest showdecimali32 shrinki32 seed
+let fullStupid (seed : i32) : (bool, []u8) = runTest stupidGeni32 stupidTest stupidShow seed
+let fullIsZero (seed : i32) : (bool, []u8) = runTest isZeroGen isZeroTest isZeroShow seed
 
 entry main = fullStupid
 
+entry arbitrary (seed : i32) : testdata (i32, i32)=
+  stupidGeni32 (minstd_rand.rng_from_seed [seed])
 
+entry property (input : testdata (i32, i32)) : bool = stupidTest input
 
-
-let stoop = shrinker stupidTest stupidShrink
+entry show (input : testdata (i32, i32)) : []u8 = stupidShow input
