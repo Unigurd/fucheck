@@ -11,9 +11,10 @@ import Foreign.Ptr (Ptr)
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Array (allocaArray, peekArray)
 import Foreign.Storable (Storable, peek)
-import Data.List (unfoldr)
+import Data.List (unfoldr, foldl')
 import System.Random (randomIO, getStdGen, next, RandomGen)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
+
 
 
 
@@ -157,6 +158,7 @@ foreign import ccall
                      -> Int32                   -- seed
                      -> IO (Int32)              -- Possibly error msg?
 
+--futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> ExceptT Int32 IO String
 
 futEntry :: Ptr Futhark_Context -> Int32 -> IO Result
 futEntry ctx seed = do
@@ -170,14 +172,95 @@ futEntry ctx seed = do
         )
 
     case entryResult of
-      Left exitCode -> return $ Exception exitCode seed
+      Left exitCode -> return $ Exception Test exitCode seed
       Right str -> do
         bool <- peek boolPtr
-        return $ if bool then Success else Failure str seed)
+        eStr <- runExceptT $ futValues ctx str
+        return $ if bool then Success else Failure eStr seed)
+
+
+spaces = ' ':spaces
+
+indent n str =
+  take n spaces ++ str
+
+-- off by one?
+padEndUntil end str = str ++ take (end - length str) spaces
+
+formatMessages :: [(String, String)] -> String
+formatMessages messages = niceMsgs
+  where
+    (names, values) = unzip messages
+    longestName     = foldl' (\acc elm -> max acc $ length elm) 0 names
+    formatName      = indent 2 . padEndUntil longestName . (++ ":")
+    formattedNames  = map formatName names
+    lineList        = zipWith (++) formattedNames values
+    niceMsgs        = foldr (\m acc -> "  " ++ m ++ "\n" ++ acc) "\n" lineList
+
+crashMessage stage messages = crashMessage
+  where
+    firstLine       = "Futhark crashed in " ++ stage ++ "\n"
+    restLines       = formatMessages messages
+    crashMessage    = firstLine ++ restLines
+
+
+genericCrashMessage stage seed exitCode =
+  "Futhark crashed in " ++ stage ++ "\n"
+  ++ "Exit code: " ++ show exitCode ++ "\n"
+  ++ "Seed:      " ++ show seed ++ "\n"
+  
+
+crashInArbitrary seed exitCode = genericCrashMessage "arbitrary"
+
+crashInProperty seed exitCode input =
+  genericCrashMessage "property" seed exitCode
+  ++ "Input:     " ++ input ++ "\n"
+
+crashInShow seed exitCode input = 
+  genericCrashMessage "show" seed exitCode
+  ++ "Input:     " ++ input ++ "\n"
+
+data Stage = Arb | Test | Show
+stage2str Arb  = "arbitrary"
+stage2str Test = "property"
+stage2str Show = "show"
 
 data Result = Success
-            | Failure (Ptr (Futhark_u8_1d)) Int32 -- Error message and seed
-            | Exception Int32 Int32               -- Error exitCode and seed
+            | Failure (Either Int32 String) Int32 -- Error message and seed
+            | Exception Stage Int32 Int32               -- Error exitCode and seed
+
+someFun :: Ptr Futhark_Context -> Int32 -> IO Result
+someFun ctx seed = do
+  eTestdata <- runExceptT $ futArbitrary ctx seed
+  case eTestdata of
+    Left arbExitCode -> return $ Exception Arb arbExitCode seed
+--      crashMessage "arbitrary" [("Exit code", show exitCode),
+--                                ("Seed", show seed)]
+    Right testdata -> do
+      eResult <- runExceptT $ futProperty ctx testdata
+      case eResult of
+        Left propExitCode -> return $ Exception Test propExitCode seed
+        Right result -> 
+          if result 
+          then return Success 
+          else do
+            eStrInput <- runExceptT $ futShow ctx testdata
+            return $ Failure eStrInput seed
+
+result2str :: Result -> String
+result2str Success = "Success!"
+result2str (Failure eStr seed) =
+  case eStr of
+    Left exitCode -> "Test failed on seed " ++ show seed ++ "\n"
+                     ++ "and show crashed with exit code " ++ show exitCode
+    Right str -> "Test Failed on input " ++ str
+result2str (Exception stage exitCode seed) =
+  crashMessage (stage2str stage) [("Exit code", show exitCode),
+                                  ("Seed", show seed)]
+
+
+
+
 
 main :: IO ()
 main = do
@@ -186,13 +269,10 @@ main = do
 
   gen <- getStdGen
 
-  let exceptBool = futProperty ctx =<< (futArbitrary ctx $ toEnum $ fst $ next gen)
 
-  exceptResult <- runExceptT exceptBool
-  putStrLn $ case exceptResult of
-    Right result   ->  (if result then "Yay! " else "Test failed >:( " ) ++ show result
-    Left errorcode -> "CRASH! " ++ show errorcode
-     
+  result <- someFun ctx 653275649 -- $ toEnum $ fst $ next gen
+  putStrLn $ result2str result
+    
 
   let tests = testLoop ctx gen
   result <- doTests 100 tests
@@ -200,9 +280,8 @@ main = do
   case result of
     Success -> putStrLn "Success"
     Failure futStr seed -> do
-      str <- runExceptT $ futValues ctx futStr
-      putStrLn $ "Failure with input " ++ (right str) ++ " from seed " ++ show seed
-    Exception exitCode seed -> putStrLn ("Futhark crashed with exit code " ++ show exitCode ++ " from seed " ++ show seed)
+      putStrLn $ "Failure with input " ++ (right futStr) ++ " from seed " ++ show seed
+    Exception _ exitCode seed -> putStrLn ("Futhark crashed with exit code " ++ show exitCode ++ " from seed " ++ show seed)
 
   futFreeContext ctx
   futFreeConfig cfg
@@ -214,7 +293,7 @@ coalesce failure _       = failure
 doTests :: Int -> [IO Result] -> IO Result
 doTests n ios = do
   results <- sequence $ take n ios
-  return $ foldl coalesce Success results
+  return $ foldl' coalesce Success results
 
 testLoop :: RandomGen g => Ptr Futhark_Context -> g -> [IO Result]
 testLoop ctx gen = results
