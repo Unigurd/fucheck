@@ -2,45 +2,74 @@ import "lib/github.com/diku-dk/cpprandom/random"
 module dist = uniform_int_distribution i32 minstd_rand
 
 
+type size = i32
 type testdata 't = #testdata t
 type result = #success | #failure i32
-type gen = minstd_rand.rng
+type rng = minstd_rand.rng
+type^ gen 'a = #gen (size -> rng -> testdata a)
+
 type maybe 'a = #just a | #nothing
 
-let bind 'a 'b (m : maybe a) (f : a -> maybe b) : maybe b = match m
+let runGen 'a (gen : gen a) (size : size) (rng : rng) : testdata a =
+  match gen
+  case #gen f -> f size rng
+
+let bind 'a 'b (m : maybe a) (f : a -> maybe b) : maybe b =
+  match m
   case #just a  -> f a
   case #nothing -> #nothing
 
-let isJust 't (maybe : maybe t) = match maybe
+let isJust 't (maybe : maybe t) =
+  match maybe
   case #just _  -> true
   case #nothing -> false
 
+let snd (a,b) = b
+
 --
--- Generator combinators
+-- Rngerator combinators
 --
 
-let geni32range ((low,high) : (i32,i32)) (gen : gen) : (gen,i32) =
-  dist.rand(low,high) gen
+let choose (bounds : (i32,i32)) : gen i32 =
+  #gen (\_ r -> #testdata (snd (dist.rand bounds r)))
 
--- always  generates 0 for some reason
---let geni32 (gen : gen) : (gen,i32) =
---  dist.rand (i32.lowest, i32.highest) gen
+let sized 'a (fgen : size -> gen a) : gen a =
+  #gen (\n r ->
+          match (fgen n)
+          case #gen m -> m n r)
 
-let genbool (gen : gen) : (gen,bool) =
-  let (gen, res) = dist.rand (0,1) gen
-  in  (gen, if res == 1
+let arbitraryi32 : gen i32 = sized (\n -> choose (-n,n))
+
+let arbitrarytuple 'a 'b (arbitrarya : gen a) (arbitraryb : gen b) : gen (a,b) =
+  #gen (\n r ->
+          let rngs = minstd_rand.split_rng 2 r
+          let a = runGen arbitrarya n rngs[0]
+          let b = runGen arbitraryb n rngs[1]
+          in match (a,b)
+             case (#testdata a, #testdata b) -> #testdata (a,b))
+
+let rngi32range ((low,high) : (i32,i32)) (rng : rng) : (rng,i32) =
+  dist.rand(low,high) rng
+
+-- always  rngerates 0 for some reason
+--let rngi32 (rng : rng) : (rng,i32) =
+--  dist.rand (i32.lowest, i32.highest) rng
+
+let rngbool (rng : rng) : (rng,bool) =
+  let (rng, res) = dist.rand (0,1) rng
+  in  (rng, if res == 1
                then true
                else false)
 
-let genArrLen 't (genElms : (gen -> (gen,t))) (length : i32) (gen : gen) : (gen,[]t) =
-  let gens        = minstd_rand.split_rng length gen
-  let (gens,elms) = unzip <| map genElms gens
-  let gen         = minstd_rand.join_rng gens
-  in (gen, elms)
+let rngArrLen 't (rngElms : (rng -> (rng,t))) (length : i32) (rng : rng) : (rng,[]t) =
+  let rngs        = minstd_rand.split_rng length rng
+  let (rngs,elms) = unzip <| map rngElms rngs
+  let rng         = minstd_rand.join_rng rngs
+  in (rng, elms)
 
-let genArr 't (genElms : (gen -> (gen,t))) (maxLen : i32) (gen : gen) : (gen,[]t) =
-  let (gen, length) = dist.rand(0, maxLen) gen
-  in genArrLen genElms length gen
+let rngArr 't (rngElms : (rng -> (rng,t))) (maxLen : i32) (rng : rng) : (rng,[]t) =
+  let (rng, length) = dist.rand(0, maxLen) rng
+  in rngArrLen rngElms length rng
 
 --
 -- String combinators
@@ -97,14 +126,14 @@ let showSign (sign : sign) = match sign
   case #positive -> ""
   case #negative -> "-"
 
-let digify base n : (sign, []i32) = 
+let digify base n : (sign, []i32) =
   (if n < 0 then #negative else #positive,
   let n = i32.abs n
   let digitNr = glp base n
   let digitArr = reverse <| iota digitNr
   let (digits, _) =
-        loop (digits, remainder) = ([], n) 
-        for i in digitArr 
+        loop (digits, remainder) = ([], n)
+        for i in digitArr
         do (digits ++ [remainder / (base**i)],remainder % (base**i))
   in digits
   )
@@ -135,7 +164,7 @@ let show4tuple str1 str2 str3 str4 = "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3
 let showArray stringify strs = showCollection "[" ", " "]" stringify strs
 
 --
--- Generator combinators
+-- generator combinators
 --
 
 --shrinkIntegral :: Integral a => a -> [a]
@@ -167,7 +196,7 @@ let shrinktogether 's 't
                    (shrink1 : s -> i32 -> maybe s)
                    (shrink2 : t -> i32 -> maybe t)
                    ((data1, data2) : (s, t))
-                   (i : i32) 
+                   (i : i32)
                    : maybe (s, t) =
   -- Tries shrinking each argument separately. For simplicity
   let n = countshrunk shrink1 data1 -- slow, might be moved
@@ -192,7 +221,7 @@ let shrinktogether 's 't
 --  -- So we also try only shrinking 1 argument
 --  let shrink1 = augmentShrink (#just data1) shrink1
 --  let shrink2 = augmentShrink (#just data2) shrink2
---  -- Increase i so i = 0 won't 
+--  -- Increase i so i = 0 won't
 --  -- leave both data1 and data2 unchanged
 --  let i = i + 1
 --  let maybeshrunk1 = shrink1 data1 (i/(n+1))
@@ -210,7 +239,7 @@ let naiveshrinki32 (data :i32) (i : i32) : maybe i32 =
      then #nothing
      else #just shrunk
 
-  
+
 
 let shrinki32 (data : i32) (i : i32) : maybe i32 =
   -- if data is 0 we shrink it naively
@@ -226,10 +255,10 @@ let shrinki32 (data : i32) (i : i32) : maybe i32 =
 -- Tests
 --
 
-let zipGeni32 (gen : gen) : ([]i32, []i32) =
-  let (gen, length) = dist.rand (0,1000) gen
-  let (gen, arr1)   = genArrLen (geni32range (-100,100)) length gen
-  let (_,    arr2)  = genArrLen (geni32range (-100,100)) length gen
+let zipRngi32 (rng : rng) : ([]i32, []i32) =
+  let (rng, length) = dist.rand (0,1000) rng
+  let (rng, arr1)   = rngArrLen (rngi32range (-100,100)) length rng
+  let (_,    arr2)  = rngArrLen (rngi32range (-100,100)) length rng
   in (arr1, arr2)
 
 let zipTest [n] ((as,bs) : ([n]i32,[n]i32)) = (as,bs) == unzip (zip as bs)
@@ -238,13 +267,14 @@ let zipShow _ : []u8 = "not implemented"
 
 
 
-let stupidGeni32 gen : testdata (i32, i32)=
-  let (gen, i1) = geni32range (-100,00) gen
-  let (_,   i2) = geni32range (-100,00) gen
-  in #testdata (i1,i2)
+let stupidGeni32 : gen (i32, i32) =
+  arbitrarytuple arbitraryi32 arbitraryi32
+--  let (rng, i1) = rngi32range (-100,00) rng
+--  let (_,   i2) = rngi32range (-100,00) rng
+--  in #testdata (i1,i2)
 
 let stupidTest (input : testdata (i32,i32)) = match input
-  case #testdata (i1, i2) -> i1 != i2
+  case #testdata (i1, i2) -> i1 == i2
 
 let stupidShow (input : testdata (i32, i32)) = match input
   case #testdata (i1,i2) -> show2tuple (showdecimali32 i1) (showdecimali32 i2)
@@ -256,7 +286,7 @@ let stupidShrink = shrinktogether shrinki32 shrinki32
 let isZeroShow (input : testdata i32) : []u8 = match input
   case #testdata m -> showdecimali32 m
 
-let isZeroGen gen : testdata i32= let (_, i) = geni32range (-100,100) gen in #testdata i
+let isZeroRng rng : testdata i32= let (_, i) = rngi32range (-100,100) rng in #testdata i
 let isZeroTest (input : testdata i32) = match input
   case #testdata i -> i == 0
 
@@ -281,13 +311,13 @@ let it 't
       case #just shrunk ->
         if property shrunk
         -- if the property holds we'll try shrinking further on the same input
-        then (smallest, input, i + 1) 
+        then (smallest, input, i + 1)
         -- if the property doesn't hold, we'll shrink on the new, smaller input
         else (shrunk, #just shrunk, 0)
 
 let bla p s (x,i) = it p s (x, #just x, i)
 
-let shrinker 't 
+let shrinker 't
              (property : t -> bool)
              (shrink : t -> i32 -> maybe t)
              (input : t)
@@ -298,30 +328,34 @@ let shrinker 't
 --    do it property shrink (smallest, input, i)
   in shrunkinput
 
-let runTest 't 
+let runTest 't
             (arbitrary : minstd_rand.rng -> t)
             (property : t -> bool)
             (show : t -> []u8)
 --            (shrink : t -> i32 -> maybe t)
-            (seed : i32) : 
+            (seed : i32) :
             (bool,[]u8) =
-  let gen          = minstd_rand.rng_from_seed [seed]
-  let input        = arbitrary gen
+  let rng          = minstd_rand.rng_from_seed [seed]
+  let input        = arbitrary rng
   let result       = property input
   --let shrunkInput = if result then input else shrinker property shrink input
   in (result, if result then "" else show input)
 
   --loop i = 1 while (factor ** i) <= n do i + 1
 
---let fullZip (seed : i32) : (bool, []u8) = runTest zipGeni32 zipTest zipShow seed
-let fullStupid (seed : i32) : (bool, []u8) = runTest stupidGeni32 stupidTest stupidShow seed
-let fullIsZero (seed : i32) : (bool, []u8) = runTest isZeroGen isZeroTest isZeroShow seed
+--let fullZip (seed : i32) : (bool, []u8) = runTest zipRngi32 zipTest zipShow seed
+--let fullStupid (seed : i32) : (bool, []u8) = runTest stupidGeni32 stupidTest stupidShow seed
+--let fullIsZero (seed : i32) : (bool, []u8) = runTest isZeroRng isZeroTest isZeroShow seed
 
-entry main = fullStupid
+--entry main = fullStupid
 
-entry arbitrary (seed : i32) : testdata (i32, i32)=
-  stupidGeni32 (minstd_rand.rng_from_seed [seed])
+entry arbitrary (size : size) (seed : i32) : testdata (i32, i32) =
+  --#testdata (1,seed/0)
+  --runGen stupidGeni32 size (minstd_rand.rng_from_seed [seed])
+  #testdata (7,7)
 
-entry property (input : testdata (i32, i32)) : bool = stupidTest input
+entry property (input : testdata (i32, i32)) : bool =
+  stupidTest input
 
-entry show (input : testdata (i32, i32)) : []u8 = stupidShow input
+entry show (input : testdata (i32, i32)) : []u8 =
+  stupidShow input

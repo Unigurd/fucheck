@@ -17,7 +17,7 @@ build-type:          Simple
 extra-source-files:  CHANGELOG.md
 
 executable fucheck
-  main-is:             fucheck.hs
+  main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.13 && <4.14, random >= 1.1, OpenCL, bytestring, utf8-string, transformers
