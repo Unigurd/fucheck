@@ -351,8 +351,8 @@ let runTest 't
 
 entry arbitrary (size : size) (seed : i32) : testdata (i32, i32) =
   --#testdata (1,seed/0)
-  --runGen stupidGeni32 size (minstd_rand.rng_from_seed [seed])
-  #testdata (7,7)
+  runGen stupidGeni32 size (minstd_rand.rng_from_seed [seed])
+  --#testdata (7,7)
 
 entry property (input : testdata (i32, i32)) : bool =
   stupidTest input
