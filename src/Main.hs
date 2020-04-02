@@ -152,9 +152,10 @@ formatMessages :: [(String, String)] -> [String]
 formatMessages messages = lines
   where
     (names, values) = unzip messages
-    longestName     = foldl' (\acc elm -> max acc $ length elm) 0 names
-    formatName      = padEndUntil longestName . (++ ":")
-    formattedNames  = map formatName names
+    namesColon      = (++ ": ") <$> names
+    longestName     = foldl' (\acc elm -> max acc $ length elm) 0 namesColon
+    formatName      = padEndUntil longestName
+    formattedNames  = map formatName namesColon
     lines           = zipWith (++) formattedNames values
 
 funCrash :: String -> [(String,String)] -> [String]
@@ -167,9 +168,9 @@ crashMessage :: CInt -> [(String,[(String,String)])] -> [String]
 crashMessage seed messages = crashMessage
   where
     crashLine = ("Futhark crashed on seed " ++ show seed)
-                : [indent 2 "in function(s)"]
-    lines = uncurry funCrash =<< messages
-    crashMessage = crashLine ++ (indent 2 <$> lines)
+    lines                = uncurry funCrash =<< messages
+    linesWithDescription = "in function(s)":(indent 2 <$> lines)
+    crashMessage         = crashLine:(indent 2 <$> linesWithDescription)
 
 
 
@@ -242,7 +243,9 @@ infResults state
 result2str :: Result -> String
 result2str Success = "Success!"
 result2str (Failure (Right str) seed) =
-  "Test failed on input " ++ str
+  "Test failed on input " ++ iStr
+  where
+    iStr = unlines $ indent 2 <$> lines str
 result2str (Failure (Left exitCode) seed) =
   unlines $ ("Test failed on seed " ++ show seed)
   : crashMessage seed [("show",[("Exit code", show exitCode)])]
@@ -250,10 +253,10 @@ result2str (Exception Nothing stage exitCode seed) =
   unlines $ crashMessage seed [((stage2str stage),[("Exit code", show exitCode)])]
 
 result2str (Exception (Just (Right input)) stage exitCode seed) =
-  unlines $ crashMessage seed [((stage2str stage), [ ("Exit code", show exitCode)
-                                                   , ("Input", input)
-                                                   ])
-                              ]
+  unlines $ crashMessage seed [((stage2str stage), [ ("Input", input)
+                                                   , ("Exit code", show exitCode)
+                                                   ])]
+
 result2str (Exception (Just (Left showExitCode)) stage exitCode seed) =
   unlines $ crashMessage seed [ ((stage2str stage),[("Exit code", show exitCode)])
                               , ("show", [("Exit code", show showExitCode)])
