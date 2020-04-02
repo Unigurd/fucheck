@@ -14,6 +14,7 @@ import Foreign.Storable (Storable, peek)
 import Data.List (unfoldr, foldl')
 import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
+import Foreign.C.Types (CInt(CInt))
 
 
 data Futhark_Context_Config
@@ -34,14 +35,13 @@ right (Right r) = r
 
 
 
-type Cint = Int32
 data Futhark_u8_1d
 data FutharkTestData
 
 haskify :: Storable out
-        => (Ptr out -> input -> IO Cint)
+        => (Ptr out -> input -> IO CInt)
         -> input
-        -> ExceptT Cint IO out
+        -> ExceptT CInt IO out
 haskify c_fun input =
   ExceptT $ alloca $ (\outPtr -> do
     exitcode <- c_fun outPtr input
@@ -50,10 +50,10 @@ haskify c_fun input =
     else return $ Left exitcode)
 
 haskify2 :: Storable out
-        => (Ptr out -> input1 -> input2 -> IO Cint)
+        => (Ptr out -> input1 -> input2 -> IO CInt)
         -> input1
         -> input2
-        -> ExceptT Cint IO out
+        -> ExceptT CInt IO out
 haskify2 c_fun input1 input2 =
   ExceptT $ alloca $ (\outPtr -> do
     exitcode <- c_fun outPtr input1 input2
@@ -81,10 +81,10 @@ foreign import ccall
   futhark_values_u8_1d :: Ptr Futhark_Context
                        -> Ptr Futhark_u8_1d -- Old fut array
                        -> Ptr Word8         -- New array
-                       -> IO Cint          -- Error info? Is this the right type?
+                       -> IO CInt          -- Error info? Is this the right type?
 
 
-futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> ExceptT Cint IO String
+futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> ExceptT CInt IO String
 futValues ctx futArr = ExceptT $ do
   shape <- futShape ctx futArr
   eitherArr <- runExceptT $ haskifyArr shape (futhark_values_u8_1d ctx) futArr
@@ -109,11 +109,11 @@ futShape ctx futArr = do
 foreign import ccall
   futhark_entry_arbitrary :: Ptr Futhark_Context
                           -> Ptr futharkTestData
-                          -> Cint               -- size
-                          -> Cint               -- seed
-                          -> IO Cint
+                          -> CInt               -- size
+                          -> CInt               -- seed
+                          -> IO CInt
 
-futArbitrary :: Ptr Futhark_Context -> Cint -> Cint -> ExceptT Cint IO (Ptr futharkTestData)
+futArbitrary :: Ptr Futhark_Context -> CInt -> CInt -> ExceptT CInt IO (Ptr futharkTestData)
 futArbitrary ctx = haskify2 (futhark_entry_arbitrary ctx)
 
 
@@ -122,9 +122,9 @@ foreign import ccall
   futhark_entry_property :: Ptr Futhark_Context
                          -> Ptr Bool
                          -> Ptr FutharkTestData
-                         -> IO Cint
+                         -> IO CInt
 
-futProperty :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT Cint IO Bool
+futProperty :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT CInt IO Bool
 futProperty ctx = haskify (futhark_entry_property ctx)
 
 -- Show
@@ -132,9 +132,9 @@ foreign import ccall
   futhark_entry_show :: Ptr Futhark_Context
                      -> Ptr (Ptr Futhark_u8_1d)
                      -> Ptr FutharkTestData
-                     -> IO Cint
+                     -> IO CInt
 
-futShow :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT Cint IO String
+futShow :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT CInt IO String
 futShow ctx input = do
   u8arr <- haskify (futhark_entry_show ctx) input
   futValues ctx u8arr
@@ -163,7 +163,7 @@ funCrash stage messages = crashMessage
     restLines       = formatMessages messages
     crashMessage    = stage:(indent 2 <$> restLines)
 
-crashMessage :: Cint -> [(String,[(String,String)])] -> [String]
+crashMessage :: CInt -> [(String,[(String,String)])] -> [String]
 crashMessage seed messages = crashMessage
   where
     crashLine = ("Futhark crashed on seed " ++ show seed)
@@ -180,27 +180,27 @@ stage2str Test = "property"
 stage2str Show = "show"
 
 data Result = Success
-            | Failure (Either Cint String) Cint              -- input, seed
-            | Exception (Maybe (Either Cint String)) Stage Cint Cint -- input, stage, error code, seed
+            | Failure (Either CInt String) CInt              -- input, seed
+            | Exception (Maybe (Either CInt String)) Stage CInt CInt -- input, stage, error code, seed
 
 data State = MkState
   {
     ctx             :: Ptr Futhark_Context
   , maxSuccessTests :: Int
-  , computeSize     :: Int -> Cint
+  , computeSize     :: Int -> CInt
   , numSuccessTests :: Int
   , randomSeed      :: StdGen
   }
 
-size :: State -> Cint
+size :: State -> CInt
 size state = (computeSize state (numSuccessTests state))
 
-getSeed :: State -> Cint
+getSeed :: State -> CInt
 getSeed = toEnum . fst . next . randomSeed
 
 nextGen = snd . next . randomSeed
 
-nextState :: State -> (Cint, State)
+nextState :: State -> (CInt, State)
 nextState state = (cInt, newState)
   where
     (int,newGen) = next $ randomSeed state
@@ -212,7 +212,7 @@ someFun state = do
   let seed = getSeed state
   eTestdata <- runExceptT $ futArbitrary (ctx state) (size state) seed
   case eTestdata of
-    Left arbExitCode -> return $ Exception Nothing Arb arbExitCode seed -- ARGH!
+    Left arbExitCode -> return $ Exception Nothing Arb arbExitCode seed
     Right testdata -> do
       eResult <- runExceptT $ futProperty (ctx state) testdata
       case eResult of
@@ -272,7 +272,6 @@ main = do
         , numSuccessTests = 0
         , randomSeed      = gen
         }
-
 
   result <- infResults state
   putStrLn $ result2str result
