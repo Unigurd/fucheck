@@ -134,48 +134,10 @@ foreign import ccall
                      -> Ptr FutharkTestData
                      -> IO Cint
 
-
--- Use monad transformer?
 futShow :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT Cint IO String
 futShow ctx input = do
   u8arr <- haskify (futhark_entry_show ctx) input
   futValues ctx u8arr
-
---  eitheru8arr <- haskify futhark_entry_show ctx input
---  ExceptT $ case eitheru8arr of
---    Right u8arr -> do
---      str <- futValues ctx u8arr
---      return $ Right str
---    Left errorcode -> return $ Left errorcode
-
-
--- Entry
-foreign import ccall
-  futhark_entry_main :: Ptr Futhark_Context
-                     -> Ptr Bool                -- succeeded?
-                     -> Ptr (Ptr Futhark_u8_1d) -- string
-                     -> Cint                   -- seed
-                     -> IO (Cint)              -- Possibly error msg?
-
---futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> ExceptT Cint IO String
-
---futEntry :: Ptr Futhark_Context -> Cint -> ExceptT Result IO String
---futEntry ctx seed = do
---  alloca $ (\boolPtr -> do
---    entryResult <-
---      alloca $ (\strPtr -> do
---        exitCode <- futhark_entry_main ctx boolPtr strPtr seed
---        if exitCode == 0
---        then (return . Right) =<< peek strPtr
---        else return $ Left exitCode
---        )
---
---    case entryResult of
---      Left exitCode -> return $ Exception Test exitCode seed
---      Right str -> do
---        bool <- peek boolPtr
---        eStr <- runExceptT $ futValues ctx str
---        return $ if bool then Success else Failure eStr seed)
 
 
 spaces = ' ':spaces
@@ -185,9 +147,6 @@ indent n str =
 
 -- off by one?
 padEndUntil end str = str ++ take (end - length str) spaces
-
---tree n node subnodes =
---  node ++ "\n" ++ (indent n <$> subnodes)
 
 formatMessages :: [(String, String)] -> [String]
 formatMessages messages = lines
@@ -267,10 +226,6 @@ result2str (Failure (Left exitCode) seed) =
 result2str (Exception _ stage exitCode seed) = -- CHANGE _
   unlines $ crashMessage seed [((stage2str stage),[("Exit code", show exitCode)])]
 
-
-
-
-
 main :: IO ()
 main = do
   cfg <- futNewConfig
@@ -281,48 +236,5 @@ main = do
   result <- infResults ctx seeds
   putStrLn $ result2str result
 
-
---  arb <- runExceptT $ futArbitrary ctx 20 653275648
---  res <- runExceptT $ futProperty ctx $ right arb
---  str <- runExceptT $ futShow ctx $ right arb
---
---  putStrLn $ show $ right res
---  putStrLn $ right str
---
---  result <- someFun ctx 20 653275648 -- $ toEnum $ fst $ next gen
---  putStrLn $ result2str result
-
-
---  let tests = testLoop ctx gen
---  result <- doTests 100 tests
---
---  case result of
---    Success -> putStrLn "Success"
---    Failure futStr seed -> do
---      putStrLn $ "Failure with input " ++ (right futStr) ++ " from seed " ++ show seed
---    Exception _ exitCode seed -> putStrLn ("Futhark crashed with exit code " ++ show exitCode ++ " from seed " ++ show seed)
-
   futFreeContext ctx
   futFreeConfig cfg
-
---coalesce Success Success = Success
---coalesce Success failure = failure
---coalesce failure _       = failure
---
---doTests :: Int -> [IO Result] -> IO Result
---doTests n ios = do
---  results <- sequence $ take n ios
---  return $ foldl' coalesce Success results
---
---testLoop :: RandomGen g => Ptr Futhark_Context -> g -> [IO Result]
---testLoop ctx gen = results
---  where
---    seeds      = myIterate next32 gen
---    results = map (futEntry ctx) seeds
---
---next32 :: RandomGen g => g -> (Cint, g)
---next32 g = (toEnum int, newGen)
---  where (int,newGen) = next g
---
---myIterate :: (a -> (b,a)) -> a -> [b]
---myIterate f x = unfoldr (\x -> Just $ f x) x

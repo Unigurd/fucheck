@@ -51,10 +51,6 @@ let arbitrarytuple 'a 'b (arbitrarya : gen a) (arbitraryb : gen b) : gen (a,b) =
 let rngi32range ((low,high) : (i32,i32)) (rng : rng) : (rng,i32) =
   dist.rand(low,high) rng
 
--- always  rngerates 0 for some reason
---let rngi32 (rng : rng) : (rng,i32) =
---  dist.rand (i32.lowest, i32.highest) rng
-
 let rngbool (rng : rng) : (rng,bool) =
   let (rng, res) = dist.rand (0,1) rng
   in  (rng, if res == 1
@@ -269,9 +265,6 @@ let zipShow _ : []u8 = "not implemented"
 
 let stupidGeni32 : gen (i32, i32) =
   arbitrarytuple arbitraryi32 arbitraryi32
---  let (rng, i1) = rngi32range (-100,00) rng
---  let (_,   i2) = rngi32range (-100,00) rng
---  in #testdata (i1,i2)
 
 let stupidTest (input : testdata (i32,i32)) = match input
   case #testdata (i1, i2) -> i1 == i2
@@ -341,13 +334,6 @@ let runTest 't
   --let shrunkInput = if result then input else shrinker property shrink input
   in (result, if result then "" else show input)
 
-  --loop i = 1 while (factor ** i) <= n do i + 1
-
---let fullZip (seed : i32) : (bool, []u8) = runTest zipRngi32 zipTest zipShow seed
---let fullStupid (seed : i32) : (bool, []u8) = runTest stupidGeni32 stupidTest stupidShow seed
---let fullIsZero (seed : i32) : (bool, []u8) = runTest isZeroRng isZeroTest isZeroShow seed
-
---entry main = fullStupid
 
 entry arbitrary (size : size) (seed : i32) : testdata (i32, i32) =
   --#testdata (1,seed/0)
