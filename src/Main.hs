@@ -181,7 +181,7 @@ stage2str Show = "show"
 
 data Result = Success
             | Failure (Either Cint String) Cint              -- input, seed
-            | Exception (Either Cint String) Stage Cint Cint -- input, stage, error code, seed
+            | Exception (Maybe (Either Cint String)) Stage Cint Cint -- input, stage, error code, seed
 
 data State = MkState
   {
@@ -212,11 +212,15 @@ someFun state = do
   let seed = getSeed state
   eTestdata <- runExceptT $ futArbitrary (ctx state) (size state) seed
   case eTestdata of
-    Left arbExitCode -> return $ Exception (Right "someerrorstring") Arb arbExitCode seed -- ARGH!
+    Left arbExitCode -> return $ Exception Nothing Arb arbExitCode seed -- ARGH!
     Right testdata -> do
       eResult <- runExceptT $ futProperty (ctx state) testdata
       case eResult of
-        Left propExitCode -> return $ Exception (Right "Yabbadabbadoo!") Test propExitCode seed
+        Left propExitCode -> do
+          eStr <- runExceptT $ futShow (ctx state) testdata
+          case eStr of
+            Right str -> return $ Exception (Just (Right str)) Test propExitCode seed
+            Left showExitCode -> return $ Exception (Just (Left showExitCode)) Test propExitCode seed
         Right result ->
           if result
           then return Success
@@ -242,8 +246,18 @@ result2str (Failure (Right str) seed) =
 result2str (Failure (Left exitCode) seed) =
   unlines $ ("Test failed on seed " ++ show seed)
   : crashMessage seed [("show",[("Exit code", show exitCode)])]
-result2str (Exception _ stage exitCode seed) = -- CHANGE _
+result2str (Exception Nothing stage exitCode seed) =
   unlines $ crashMessage seed [((stage2str stage),[("Exit code", show exitCode)])]
+
+result2str (Exception (Just (Right input)) stage exitCode seed) =
+  unlines $ crashMessage seed [((stage2str stage), [ ("Exit code", show exitCode)
+                                                   , ("Input", input)
+                                                   ])
+                              ]
+result2str (Exception (Just (Left showExitCode)) stage exitCode seed) =
+  unlines $ crashMessage seed [ ((stage2str stage),[("Exit code", show exitCode)])
+                              , ("show", [("Exit code", show showExitCode)])
+                              ]
 
 main :: IO ()
 main = do
