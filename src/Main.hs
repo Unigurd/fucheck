@@ -12,7 +12,7 @@ import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Array (allocaArray, peekArray)
 import Foreign.Storable (Storable, peek)
 import Data.List (unfoldr, foldl')
-import System.Random (randomIO, getStdGen, next, RandomGen)
+import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 
 
@@ -180,28 +180,8 @@ stage2str Test = "property"
 stage2str Show = "show"
 
 data Result = Success
-            | Failure (Either Cint String) Cint               -- input, seed
+            | Failure (Either Cint String) Cint              -- input, seed
             | Exception (Either Cint String) Stage Cint Cint -- input, stage, error code, seed
-
-someFun :: Ptr Futhark_Context -> Cint -> Cint -> IO Result
-someFun ctx size seed = do
-  eTestdata <- runExceptT $ futArbitrary ctx size seed
-  case eTestdata of
-    Left arbExitCode -> return $ Exception (Right "someerrorstring") Arb arbExitCode seed -- ARGH!
-    Right testdata -> do
-      eResult <- runExceptT $ futProperty ctx testdata
-      case eResult of
-        Left propExitCode -> return $ Exception (Right "Yabbadabbadoo!") Test propExitCode seed
-        Right result ->
-          if result
-          then return Success
-          else do
-            eStrInput <- runExceptT $ futShow ctx testdata
-            return $ Failure eStrInput seed
-
-nextC :: RandomGen g => g -> [Cint]
-nextC g = toEnum int:nextC newGen
-  where (int,newGen) = next g
 
 data State = MkState
   {
@@ -209,15 +189,50 @@ data State = MkState
   , maxSuccessTests :: Int
   , computeSize     :: Int -> Cint
   , numSuccessTests :: Int
+  , randomSeed      :: StdGen
   }
 
+size :: State -> Cint
+size state = (computeSize state (numSuccessTests state))
 
-infResults :: State -> [Cint] -> IO Result
-infResults _ [] = return Success
-infResults state (seed:seeds) = do
-  result <- someFun (ctx state) (computeSize state (numSuccessTests state)) seed   -- HARDCODED SIZE
+getSeed :: State -> Cint
+getSeed = toEnum . fst . next . randomSeed
+
+nextGen = snd . next . randomSeed
+
+nextState :: State -> (Cint, State)
+nextState state = (cInt, newState)
+  where
+    (int,newGen) = next $ randomSeed state
+    cInt         = toEnum int
+    newState     = state {randomSeed = newGen}
+
+someFun :: State -> IO Result
+someFun state = do
+  let seed = getSeed state
+  eTestdata <- runExceptT $ futArbitrary (ctx state) (size state) seed
+  case eTestdata of
+    Left arbExitCode -> return $ Exception (Right "someerrorstring") Arb arbExitCode seed -- ARGH!
+    Right testdata -> do
+      eResult <- runExceptT $ futProperty (ctx state) testdata
+      case eResult of
+        Left propExitCode -> return $ Exception (Right "Yabbadabbadoo!") Test propExitCode seed
+        Right result ->
+          if result
+          then return Success
+          else do
+            eStrInput <- runExceptT $ futShow (ctx state) testdata
+            return $ Failure eStrInput seed
+
+infResults :: State -> IO Result
+infResults state
+  | numSuccessTests state >= maxSuccessTests state = return Success
+  | otherwise = do
+  result <- someFun state
   case result of
-    Success -> infResults (state {numSuccessTests = numSuccessTests state + 1}) seeds
+    Success -> infResults $ state { numSuccessTests = numSuccessTests state + 1
+                                  , randomSeed      = nextGen state
+                                  }
     _       -> return result
 
 result2str :: Result -> String
@@ -235,17 +250,17 @@ main = do
   cfg <- futNewConfig
   ctx <- futNewContext cfg
 
+  gen <- getStdGen
   let state = MkState
         { ctx             = ctx
         , maxSuccessTests = 100
         , computeSize     = toEnum . \n -> n `div` (maxSuccessTests state)
         , numSuccessTests = 0
+        , randomSeed      = gen
         }
 
 
-  gen <- getStdGen
-  let seeds = take 100 $ nextC gen
-  result <- infResults state seeds
+  result <- infResults state
   putStrLn $ result2str result
 
   futFreeContext ctx
