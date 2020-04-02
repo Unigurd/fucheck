@@ -240,6 +240,23 @@ someFun ctx size seed = do
             eStrInput <- runExceptT $ futShow ctx testdata
             return $ Failure eStrInput seed
 
+nextC :: RandomGen g => g -> [Cint]
+nextC g = toEnum int:nextC newGen
+  where (int,newGen) = next g
+
+-- change to NonEmpty
+infResults :: Ptr Futhark_Context -> [Cint] -> IO Result
+infResults _ [] = return Success
+infResults ctx (seed:seeds) = do
+  result <- someFun ctx 50 seed   -- HARDCODED SIZE
+  case result of
+    Success -> infResults ctx seeds
+    _       -> return result
+
+
+
+
+
 result2str :: Result -> String
 result2str Success = "Success!"
 result2str (Failure (Right str) seed) =
@@ -260,16 +277,20 @@ main = do
   ctx <- futNewContext cfg
 
   gen <- getStdGen
-
-  arb <- runExceptT $ futArbitrary ctx 20 653275648
-  res <- runExceptT $ futProperty ctx $ right arb
-  str <- runExceptT $ futShow ctx $ right arb
-
-  putStrLn $ show $ right res
-  putStrLn $ right str
-
-  result <- someFun ctx 20 653275648 -- $ toEnum $ fst $ next gen
+  let seeds = take 100 $ nextC gen
+  result <- infResults ctx seeds
   putStrLn $ result2str result
+
+
+--  arb <- runExceptT $ futArbitrary ctx 20 653275648
+--  res <- runExceptT $ futProperty ctx $ right arb
+--  str <- runExceptT $ futShow ctx $ right arb
+--
+--  putStrLn $ show $ right res
+--  putStrLn $ right str
+--
+--  result <- someFun ctx 20 653275648 -- $ toEnum $ fst $ next gen
+--  putStrLn $ result2str result
 
 
 --  let tests = testLoop ctx gen
