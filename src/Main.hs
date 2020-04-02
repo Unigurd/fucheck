@@ -39,9 +39,9 @@ data Futhark_u8_1d
 data FutharkTestData
 
 haskify :: Storable out
-        => (Ptr out -> input -> IO Int32)
+        => (Ptr out -> input -> IO Cint)
         -> input
-        -> ExceptT Int32 IO out
+        -> ExceptT Cint IO out
 haskify c_fun input =
   ExceptT $ alloca $ (\outPtr -> do
     exitcode <- c_fun outPtr input
@@ -50,10 +50,10 @@ haskify c_fun input =
     else return $ Left exitcode)
 
 haskify2 :: Storable out
-        => (Ptr out -> input1 -> input2 -> IO Int32)
+        => (Ptr out -> input1 -> input2 -> IO Cint)
         -> input1
         -> input2
-        -> ExceptT Int32 IO out
+        -> ExceptT Cint IO out
 haskify2 c_fun input1 input2 =
   ExceptT $ alloca $ (\outPtr -> do
     exitcode <- c_fun outPtr input1 input2
@@ -81,10 +81,10 @@ foreign import ccall
   futhark_values_u8_1d :: Ptr Futhark_Context
                        -> Ptr Futhark_u8_1d -- Old fut array
                        -> Ptr Word8         -- New array
-                       -> IO Int32          -- Error info? Is this the right type?
+                       -> IO Cint          -- Error info? Is this the right type?
 
 
-futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> ExceptT Int32 IO String
+futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> ExceptT Cint IO String
 futValues ctx futArr = ExceptT $ do
   shape <- futShape ctx futArr
   eitherArr <- runExceptT $ haskifyArr shape (futhark_values_u8_1d ctx) futArr
@@ -109,11 +109,11 @@ futShape ctx futArr = do
 foreign import ccall
   futhark_entry_arbitrary :: Ptr Futhark_Context
                           -> Ptr futharkTestData
-                          -> Int32               -- size
-                          -> Int32               -- seed
-                          -> IO Int32
+                          -> Cint               -- size
+                          -> Cint               -- seed
+                          -> IO Cint
 
-futArbitrary :: Ptr Futhark_Context -> Int32 -> Int32 -> ExceptT Int32 IO (Ptr futharkTestData)
+futArbitrary :: Ptr Futhark_Context -> Cint -> Cint -> ExceptT Cint IO (Ptr futharkTestData)
 futArbitrary ctx = haskify2 (futhark_entry_arbitrary ctx)
 
 
@@ -122,9 +122,9 @@ foreign import ccall
   futhark_entry_property :: Ptr Futhark_Context
                          -> Ptr Bool
                          -> Ptr FutharkTestData
-                         -> IO Int32
+                         -> IO Cint
 
-futProperty :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT Int32 IO Bool
+futProperty :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT Cint IO Bool
 futProperty ctx = haskify (futhark_entry_property ctx)
 
 -- Show
@@ -132,11 +132,11 @@ foreign import ccall
   futhark_entry_show :: Ptr Futhark_Context
                      -> Ptr (Ptr Futhark_u8_1d)
                      -> Ptr FutharkTestData
-                     -> IO Int32
+                     -> IO Cint
 
 
 -- Use monad transformer?
-futShow :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT Int32 IO String
+futShow :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT Cint IO String
 futShow ctx input = do
   u8arr <- haskify (futhark_entry_show ctx) input
   futValues ctx u8arr
@@ -154,12 +154,12 @@ foreign import ccall
   futhark_entry_main :: Ptr Futhark_Context
                      -> Ptr Bool                -- succeeded?
                      -> Ptr (Ptr Futhark_u8_1d) -- string
-                     -> Int32                   -- seed
-                     -> IO (Int32)              -- Possibly error msg?
+                     -> Cint                   -- seed
+                     -> IO (Cint)              -- Possibly error msg?
 
---futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> ExceptT Int32 IO String
+--futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> ExceptT Cint IO String
 
---futEntry :: Ptr Futhark_Context -> Int32 -> ExceptT Result IO String
+--futEntry :: Ptr Futhark_Context -> Cint -> ExceptT Result IO String
 --futEntry ctx seed = do
 --  alloca $ (\boolPtr -> do
 --    entryResult <-
@@ -204,7 +204,7 @@ funCrash stage messages = crashMessage
     restLines       = formatMessages messages
     crashMessage    = stage:(indent 2 <$> restLines)
 
-crashMessage :: Int32 -> [(String,[(String,String)])] -> [String]
+crashMessage :: Cint -> [(String,[(String,String)])] -> [String]
 crashMessage seed messages = crashMessage
   where
     crashLine = ("Futhark crashed on seed " ++ show seed)
@@ -221,10 +221,10 @@ stage2str Test = "property"
 stage2str Show = "show"
 
 data Result = Success
-            | Failure (Either Int32 String) Int32               -- input, seed
-            | Exception (Either Int32 String) Stage Int32 Int32 -- input, stage, error code, seed
+            | Failure (Either Cint String) Cint               -- input, seed
+            | Exception (Either Cint String) Stage Cint Cint -- input, stage, error code, seed
 
-someFun :: Ptr Futhark_Context -> Int32 -> Int32 -> IO Result
+someFun :: Ptr Futhark_Context -> Cint -> Cint -> IO Result
 someFun ctx size seed = do
   eTestdata <- runExceptT $ futArbitrary ctx size seed
   case eTestdata of
@@ -299,7 +299,7 @@ main = do
 --    seeds      = myIterate next32 gen
 --    results = map (futEntry ctx) seeds
 --
---next32 :: RandomGen g => g -> (Int32, g)
+--next32 :: RandomGen g => g -> (Cint, g)
 --next32 g = (toEnum int, newGen)
 --  where (int,newGen) = next g
 --
