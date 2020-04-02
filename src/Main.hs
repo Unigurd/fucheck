@@ -203,18 +203,22 @@ nextC :: RandomGen g => g -> [Cint]
 nextC g = toEnum int:nextC newGen
   where (int,newGen) = next g
 
--- change to NonEmpty
-infResults :: Ptr Futhark_Context -> [Cint] -> IO Result
+data State = MkState
+  {
+    ctx             :: Ptr Futhark_Context
+  , maxSuccessTests :: Int
+  , computeSize     :: Int -> Cint
+  , numSuccessTests :: Int
+  }
+
+
+infResults :: State -> [Cint] -> IO Result
 infResults _ [] = return Success
-infResults ctx (seed:seeds) = do
-  result <- someFun ctx 50 seed   -- HARDCODED SIZE
+infResults state (seed:seeds) = do
+  result <- someFun (ctx state) (computeSize state (numSuccessTests state)) seed   -- HARDCODED SIZE
   case result of
-    Success -> infResults ctx seeds
+    Success -> infResults (state {numSuccessTests = numSuccessTests state + 1}) seeds
     _       -> return result
-
-
-
-
 
 result2str :: Result -> String
 result2str Success = "Success!"
@@ -231,9 +235,17 @@ main = do
   cfg <- futNewConfig
   ctx <- futNewContext cfg
 
+  let state = MkState
+        { ctx             = ctx
+        , maxSuccessTests = 100
+        , computeSize     = toEnum . \n -> n `div` (maxSuccessTests state)
+        , numSuccessTests = 0
+        }
+
+
   gen <- getStdGen
   let seeds = take 100 $ nextC gen
-  result <- infResults ctx seeds
+  result <- infResults state seeds
   putStrLn $ result2str result
 
   futFreeContext ctx
