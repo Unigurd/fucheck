@@ -108,12 +108,12 @@ futShape ctx futArr = do
 -- Arbitrary
 foreign import ccall
   futhark_entry_arbitrary :: Ptr Futhark_Context
-                          -> Ptr futharkTestData
+                          -> Ptr (Ptr FutharkTestData)
                           -> CInt               -- size
                           -> CInt               -- seed
                           -> IO CInt
 
-futArbitrary :: Ptr Futhark_Context -> CInt -> CInt -> ExceptT CInt IO (Ptr futharkTestData)
+futArbitrary :: Ptr Futhark_Context -> CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
 futArbitrary ctx = haskify2 (futhark_entry_arbitrary ctx)
 
 
