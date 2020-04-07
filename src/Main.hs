@@ -1,6 +1,11 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+import System.Environment(getArgs)
+--import qualified System.Command as C
+--import qualified System.Process as P
+import qualified System.Process.Typed as TP
+import System.Exit (exitSuccess)
 import qualified System.Posix.DynamicLinker as DL
 import Codec.Binary.UTF8.String (decode)
 import Data.ByteString (pack)
@@ -83,8 +88,7 @@ foreign import ccall "dynamic"
   mkNewFutContext :: FunPtr (Ptr Futhark_Context_Config -> IO (Ptr Futhark_Context)) -> Ptr Futhark_Context_Config -> IO (Ptr Futhark_Context)
 newFutContext :: DL.DL -> Ptr Futhark_Context_Config -> IO (Ptr Futhark_Context)
 newFutContext dl cfg = do
---  ctx_fun :: FunPtr (Ptr Futhark_Context_Config -> IO (Ptr Futhark_Context))
-  ctx_fun <- DL.dlsym dl "futhark_context_new" -- :: IO (FunPtr (Ptr Futhark_Context_Config -> IO (Ptr Futhark_Context))
+  ctx_fun <- DL.dlsym dl "futhark_context_new"
   mkNewFutContext ctx_fun cfg
 
 foreign import ccall "dynamic"
@@ -328,11 +332,49 @@ result2str (Exception (Just (Left showExitCode)) stage exitCode seed) =
                               ]
 
 
+headWithDefault def [] = def
+headWithDefault _ (head:_) = head
+
 right (Right a) = a
 
 main :: IO ()
 main = do
-  dl      <- DL.dlopen "src/futs/fucheck.so" [DL.RTLD_NOW]
+  args <- getArgs
+  --case compare (length args) 1 of
+  --  LT -> do
+  --    putStrLn "Give test file as argument"
+  --    exitSuccess
+  --  GT -> do
+  --    putStrLn "Only accepts one argument; the test file"
+  --    exitSuccess
+  --  EQ -> return ()
+
+  let filename = headWithDefault "src/futs/fucheck" args
+  (futExitCode, futOut, futErr) <-
+    TP.readProcess $ TP.proc "futhark" ["c", "--library", filename ++ ".fut"]
+  putStrLn $ show futExitCode
+  putStrLn $ show futOut
+  putStrLn $ show futErr
+
+  (gccExitCode, gccOut, gccErr) <-
+    TP.readProcess $ TP.proc "gcc" [filename ++ ".c", "-o", filename ++ ".so", "-fPIC", "-shared"]
+  putStrLn $ show gccExitCode
+  putStrLn $ show gccOut
+  putStrLn $ show gccErr
+
+  --futProcess <- P.createProcess $ shell ("futhark c --library " ++ filename)
+  --let futArgs = ["c", "--library", filename]
+--  (futExitCode,futStdout, futStderr)
+--   <- C.readProcessWithExitCode "futhark" ["c", "--library", filename] ""
+--  case futExitCode of
+--   0 -> return ()
+--   _ -> do
+--     putStrLn "Command " ++ (unwords ("futhark":futArgs))
+--       ++ " failed with exit code " + show futExitCode ++ "\n"
+--       ++ "stdout:\n" ++ futStdout ++ "\n"
+--       ++ "stderr:\n" ++ futStderr ++ "\n"
+--     exitWith futExitCode -- change exit code
+  dl <- DL.dlopen (filename ++ ".so") [DL.RTLD_NOW]
 
   cfg <- newFutConfig dl
   ctx <- newFutContext dl cfg
