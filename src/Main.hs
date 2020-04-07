@@ -1,15 +1,18 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+import Control.Monad ((<=<))
 import System.Environment(getArgs)
 --import qualified System.Command as C
 --import qualified System.Process as P
 import qualified System.Process.Typed as TP
-import System.Exit (exitSuccess)
+import System.Exit (ExitCode(ExitSuccess), exitSuccess, exitFailure)
+import System.Directory (createDirectory, doesDirectoryExist)
 import qualified System.Posix.DynamicLinker as DL
 import Codec.Binary.UTF8.String (decode)
 import Data.ByteString (pack)
 import Data.ByteString.UTF8 (toString)
+import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.UTF8 as U
 import Data.Int  (Int32, Int64)
 import Data.Word (Word8)
@@ -19,7 +22,7 @@ import Foreign.Marshal.Array (allocaArray, peekArray)
 import Foreign.Storable (Storable, peek)
 import Data.List (unfoldr, foldl')
 import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
-import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
+import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT,throwE)
 import Foreign.C.Types (CInt(CInt))
 import Control.Monad.IO.Class(liftIO)
 import Foreign.C.String (newCString)
@@ -251,15 +254,41 @@ data Result = Success
 -- futProperty :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT CInt IO Bool
 -- futShow :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT CInt IO String
 data State = MkState
-  {
-    ctx             :: Ptr Futhark_Context
-  , arbitrary       :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
+  { arbitrary       :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
   , property        :: Ptr FutharkTestData -> ExceptT CInt IO Bool
   , shower          :: Ptr FutharkTestData -> ExceptT CInt IO String
   , maxSuccessTests :: Int
   , computeSize     :: Int -> CInt
   , numSuccessTests :: Int
   , randomSeed      :: StdGen
+  }
+
+data FutFuns = MkFuns
+  { futArb  :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
+  , futProp :: Ptr FutharkTestData -> ExceptT CInt IO Bool
+  , futShow :: Ptr FutharkTestData -> ExceptT CInt IO String
+  }
+
+loadFutFuns dl ctx test = do
+  dynArb  <- mkArbitrary dl ctx $ test ++ "arbitrary"
+  dynProp <- mkProperty  dl ctx $ test ++ "property"
+  dynShow <- mkShow      dl ctx $ test ++ "show"
+  return MkFuns { futArb  = dynArb
+                , futProp = dynProp
+                , futShow = dynShow
+                }
+
+mkDefaultState :: StdGen -> FutFuns -> State
+mkDefaultState gen fs =
+  MkState
+  { arbitrary       = futArb fs
+  , property        = futProp fs
+  , shower          = futShow fs
+  , maxSuccessTests = 100
+  , computeSize     = toEnum . \n ->  n
+    -- (maxSuccessTests state) - (maxSuccessTests state) `div` (n+1)
+  , numSuccessTests = 0
+  , randomSeed      = gen
   }
 
 size :: State -> CInt
@@ -345,11 +374,36 @@ findTests source = tests
     tokens = words <$> lines source
     tests  = filterMap getTestName tokens
 
+--myReadProcess :: TP.ProcessConfig stdin stdoutIgnored stderrIgnored ->  ExceptT ExitCode IO (ByteString, ByteString)
+--myReadProcess p = do
+--  (exitCode, out, err) :: (ExitCode, ByteString, ByteString) <- return $ TP.readProcess p
+--  case exitCode of
+--    ExitSuccess -> return (out,err)
+--    _           -> throwE exitCode
 
-headWithDefault def [] = def
+letThereBeDir dir = do
+  dirExists <- doesDirectoryExist dir
+  if not dirExists
+    then createDirectory dir
+    else return ()
+
+headWithDefault def []     = def
 headWithDefault _ (head:_) = head
 
 right (Right a) = a
+
+exitOnCompilationError exitCode filename =
+  case exitCode of
+    ExitSuccess -> return ()
+    _           -> do
+      putStrLn $ "Could not compile " ++ filename
+      exitFailure
+
+testIOprep dl ctx test = do
+  gen <- getStdGen
+  futFuns <- loadFutFuns dl ctx test
+  return (gen,futFuns)
+
 
 main :: IO ()
 main = do
@@ -367,23 +421,15 @@ main = do
   let tmpDir = "/tmp/fucheck/"
   let tmpFile = tmpDir ++ "fucheck-tmp-file"
 
-  dirExists <- doesDirectoryExist tmpDir
-  if not dirExists
-    then createDirectory tmpDir
-    else return ()
+  letThereBeDir tmpDir
 
   (futExitCode, futOut, futErr) <-
     TP.readProcess $ TP.proc "futhark" ["c", "--library", "-o", tmpFile, filename ++ ".fut"]
-  putStrLn $ show futExitCode
-  putStrLn $ show futOut
-  putStrLn $ show futErr
+  exitOnCompilationError futExitCode $ filename ++ ".fut"
 
   (gccExitCode, gccOut, gccErr) <-
     TP.readProcess $ TP.proc "gcc" [tmpFile ++ ".c", "-o", tmpFile ++ ".so", "-fPIC", "-shared"]
-  putStrLn $ show gccExitCode
-  putStrLn $ show gccOut
-  putStrLn $ show gccErr
-
+  exitOnCompilationError gccExitCode $ "generated C file"
 
   dl <- DL.dlopen (tmpFile ++ ".so") [DL.RTLD_NOW] -- Read up on flags
 
@@ -394,31 +440,9 @@ main = do
   cfg <- newFutConfig dl
   ctx <- newFutContext dl cfg
 
-  dynArb  <- mkArbitrary dl ctx $ firstTest ++ "arbitrary"
-  dynProp <- mkProperty  dl ctx $ firstTest ++ "property"
-  dynShow <- mkShow      dl ctx $ firstTest ++ "show"
-
-
-
-
-  gen <- getStdGen
-  let state = MkState
-        { ctx             = ctx
-        , arbitrary       = dynArb
-        , property        = dynProp
-        , shower          = dynShow
-        , maxSuccessTests = 100
-        , computeSize     = toEnum . \n ->  n
-          -- (maxSuccessTests state) - (maxSuccessTests state) `div` (n+1)
-        , numSuccessTests = 0
-        , randomSeed      = gen
-        }
-
-  result <- infResults state
-  putStrLn $ result2str result
-
-  --oldFutFreeContext ctx
+  ioPrep <- sequence $ map (testIOprep dl ctx) testNames
+  let states = map (uncurry mkDefaultState) ioPrep
+  sequence_ $ map ((putStrLn . result2str) <=< infResults) states
   freeFutContext dl ctx
-  --oldFutFreeConfig cfg
   newFutFreeConfig dl cfg
   DL.dlclose dl
