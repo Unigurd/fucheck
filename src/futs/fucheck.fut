@@ -259,7 +259,7 @@ let zipRngi32 (rng : rng) : ([]i32, []i32) =
 
 let zipTest [n] ((as,bs) : ([n]i32,[n]i32)) = (as,bs) == unzip (zip as bs)
 
-let zipShow _ : []u8 = "not implemented"
+let zipShow _ : []u8 = "zipShow not implemented"
 
 
 
@@ -273,13 +273,6 @@ let stupidShow (input : testdata (i32, i32)) = match input
   case #testdata (i1,i2) -> show2tuple (showdecimali32 i1 ++ "\n") (showdecimali32 i2)
 
 let stupidShrink = shrinktogether shrinki32 shrinki32
-
-let isZeroShow (input : testdata i32) : []u8 = match input
-  case #testdata m -> showdecimali32 m
-
-let isZeroRng rng : testdata i32= let (_, i) = rngi32range (-100,100) rng in #testdata i
-let isZeroTest (input : testdata i32) = match input
-  case #testdata i -> i == 0
 
 
 
@@ -346,3 +339,12 @@ entry stupidproperty (input : testdata (i32, i32)) : bool =
 
 entry stupidshow (input : testdata (i32, i32)) : []u8 =
   stupidShow input
+
+-- fucheck isZero
+entry isZeroshow (input : testdata i32) : []u8 = match input
+  case #testdata m -> showdecimali32 m
+
+entry isZeroarbitrary (size : size) (seed : i32) : testdata i32 = runGen arbitraryi32 size (minstd_rand.rng_from_seed [seed])
+
+entry isZeroproperty (input : testdata i32) = match input
+  case #testdata i -> i == 0
