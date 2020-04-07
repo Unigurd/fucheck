@@ -270,11 +270,9 @@ let stupidTest (input : testdata (i32,i32)) = match input
   case #testdata (i1, i2) -> i1 == i2
 
 let stupidShow (input : testdata (i32, i32)) = match input
-  case #testdata (i1,i2) -> show2tuple (showdecimali32 i1) (showdecimali32 i2)
-
+  case #testdata (i1,i2) -> show2tuple (showdecimali32 i1 ++ "\n") (showdecimali32 i2)
 
 let stupidShrink = shrinktogether shrinki32 shrinki32
-
 
 let isZeroShow (input : testdata i32) : []u8 = match input
   case #testdata m -> showdecimali32 m
@@ -335,13 +333,16 @@ let runTest 't
   in (result, if result then "" else show input)
 
 
-entry arbitrary (size : size) (seed : i32) : testdata (i32, i32) =
+-- fucheck stupid
+entry stupidarbitrary (size : size) (seed : i32) : testdata (i32, i32) =
   --#testdata (1,seed/0)
   runGen stupidGeni32 size (minstd_rand.rng_from_seed [seed])
-  --#testdata (7,7)
+  --#testdata (size/0,7)
 
-entry property (input : testdata (i32, i32)) : bool =
+entry stupidproperty (input : testdata (i32, i32)) : bool =
   stupidTest input
+  --match input
+  --case #testdata (x,y) -> x/0 == y
 
-entry show (input : testdata (i32, i32)) : []u8 =
+entry stupidshow (input : testdata (i32, i32)) : []u8 =
   stupidShow input

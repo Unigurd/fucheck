@@ -331,6 +331,20 @@ result2str (Exception (Just (Left showExitCode)) stage exitCode seed) =
                               , ("show", [("Exit code", show showExitCode)])
                               ]
 
+filterMap :: (a -> Maybe b) -> [a] -> [b]
+filterMap f = foldr (\elm acc -> case f elm of
+                          Just x  -> x:acc
+                          Nothing -> acc) []
+
+getTestName ["--", "fucheck", name] = Just name
+getTestName _                       = Nothing
+
+findTests :: String -> [String]
+findTests source = tests
+  where
+    tokens = words <$> lines source
+    tests  = filterMap getTestName tokens
+
 
 headWithDefault def [] = def
 headWithDefault _ (head:_) = head
@@ -362,26 +376,18 @@ main = do
   putStrLn $ show gccOut
   putStrLn $ show gccErr
 
-  --futProcess <- P.createProcess $ shell ("futhark c --library " ++ filename)
-  --let futArgs = ["c", "--library", filename]
---  (futExitCode,futStdout, futStderr)
---   <- C.readProcessWithExitCode "futhark" ["c", "--library", filename] ""
---  case futExitCode of
---   0 -> return ()
---   _ -> do
---     putStrLn "Command " ++ (unwords ("futhark":futArgs))
---       ++ " failed with exit code " + show futExitCode ++ "\n"
---       ++ "stdout:\n" ++ futStdout ++ "\n"
---       ++ "stderr:\n" ++ futStderr ++ "\n"
---     exitWith futExitCode -- change exit code
   dl <- DL.dlopen (filename ++ ".so") [DL.RTLD_NOW]
+
+  fileText <- readFile $ filename ++ ".fut"
+  let testNames = findTests fileText
+  let firstTest = head testNames
 
   cfg <- newFutConfig dl
   ctx <- newFutContext dl cfg
 
-  dynArb  <- mkArbitrary dl ctx "arbitrary"
-  dynProp <- mkProperty  dl ctx "property"
-  dynShow <- mkShow dl ctx "show"
+  dynArb  <- mkArbitrary dl ctx $ firstTest ++ "arbitrary"
+  dynProp <- mkProperty  dl ctx $ firstTest ++ "property"
+  dynShow <- mkShow      dl ctx $ firstTest ++ "show"
 
 
 
