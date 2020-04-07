@@ -364,19 +364,28 @@ main = do
   --  EQ -> return ()
 
   let filename = headWithDefault "src/futs/fucheck" args
+  let tmpDir = "/tmp/fucheck/"
+  let tmpFile = tmpDir ++ "fucheck-tmp-file"
+
+  dirExists <- doesDirectoryExist tmpDir
+  if not dirExists
+    then createDirectory tmpDir
+    else return ()
+
   (futExitCode, futOut, futErr) <-
-    TP.readProcess $ TP.proc "futhark" ["c", "--library", filename ++ ".fut"]
+    TP.readProcess $ TP.proc "futhark" ["c", "--library", "-o", tmpFile, filename ++ ".fut"]
   putStrLn $ show futExitCode
   putStrLn $ show futOut
   putStrLn $ show futErr
 
   (gccExitCode, gccOut, gccErr) <-
-    TP.readProcess $ TP.proc "gcc" [filename ++ ".c", "-o", filename ++ ".so", "-fPIC", "-shared"]
+    TP.readProcess $ TP.proc "gcc" [tmpFile ++ ".c", "-o", tmpFile ++ ".so", "-fPIC", "-shared"]
   putStrLn $ show gccExitCode
   putStrLn $ show gccOut
   putStrLn $ show gccErr
 
-  dl <- DL.dlopen (filename ++ ".so") [DL.RTLD_NOW]
+
+  dl <- DL.dlopen (tmpFile ++ ".so") [DL.RTLD_NOW] -- Read up on flags
 
   fileText <- readFile $ filename ++ ".fut"
   let testNames = findTests fileText
