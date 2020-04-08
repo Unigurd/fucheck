@@ -41,12 +41,12 @@ type ArbitraryType =  Ptr Futhark_Context
                    -> Ptr (Ptr FutharkTestData)
                    -> CInt               -- size
                    -> CInt               -- seed
-                   -> IO CInt
+                   -> CInt
 
 type PropertyType =  Ptr Futhark_Context
                   -> Ptr Bool
                   -> Ptr FutharkTestData
-                  -> IO CInt
+                  -> CInt
 
 type ShowType =  Ptr Futhark_Context
               -> Ptr (Ptr Futhark_u8_1d)
@@ -134,10 +134,18 @@ haskify3 c_fun ctx input =
     then Right <$> peek outPtr
     else return $ Left exitcode)
 
---type ShowType =  Ptr Futhark_Context
---              -> Ptr (Ptr Futhark_u8_1d)
---              -> Ptr FutharkTestData
---              -> IO CInt
+haskify4 :: Storable out
+         => (Ptr Futhark_Context -> Ptr out -> input1 -> input2 -> CInt)
+         -> Ptr Futhark_Context
+         -> input1
+         -> input2
+         -> IO (Either CInt out)
+haskify4 c_fun ctx input1 input2 =
+  alloca $ (\outPtr -> do
+    let exitcode = c_fun ctx outPtr input1 input2
+    if exitcode == 0
+    then Right <$> peek outPtr
+    else return $ Left exitcode)
 
 foreign import ccall "dynamic"
   mkFutShow :: FunPtr ShowType -> ShowType
@@ -157,15 +165,20 @@ mkShow dl ctx name = do
 foreign import ccall "dynamic"
   mkFutArb :: FunPtr ArbitraryType -> ArbitraryType
 
+mkArbitrary :: DL.DL
+            -> Ptr Futhark_Context
+            -> String
+            -> IO (CInt -> CInt -> Either CInt (Ptr FutharkTestData))
 mkArbitrary dl ctx name = do
   arbPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
-  return $ haskify2 (mkFutArb arbPtr) ctx
+  return $ (\i1 i2 -> unsafePerformIO $ haskify4 (mkFutArb arbPtr) ctx i1 i2)
 
 foreign import ccall "dynamic"
   mkFutProp :: FunPtr PropertyType -> PropertyType
+mkProperty :: DL.DL -> Ptr Futhark_Context -> String -> IO (Ptr FutharkTestData -> Either CInt Bool)
 mkProperty dl ctx name = do
   propPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
-  return $ haskify (mkFutProp propPtr) ctx
+  return $ \input -> unsafePerformIO $ haskify3 (mkFutProp propPtr) ctx input
 
 
 haskify :: Storable out
@@ -267,8 +280,8 @@ data Result =
 
 data State = MkState
   { stateTestName   :: String
-  , arbitrary       :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
-  , property        :: Ptr FutharkTestData -> ExceptT CInt IO Bool
+  , arbitrary       :: CInt -> CInt -> Either CInt (Ptr FutharkTestData)
+  , property        :: Ptr FutharkTestData -> Either CInt Bool
   , shower          :: Maybe (Ptr FutharkTestData -> Either CInt String)
   , maxSuccessTests :: Integer
   , numSuccessTests :: Integer
@@ -297,8 +310,8 @@ newFutFunNames name = FutFunNames
   }
 
 data FutFuns = MkFuns
-  { futArb  :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
-  , futProp :: Ptr FutharkTestData -> ExceptT CInt IO Bool
+  { futArb  :: CInt -> CInt -> Either CInt (Ptr FutharkTestData)
+  , futProp :: Ptr FutharkTestData -> Either CInt Bool
   , futShow :: Maybe (Ptr FutharkTestData -> Either CInt String)
   }
 
@@ -349,12 +362,10 @@ f *< a = f <*> pure a
 someFun :: State -> IO Result
 someFun state = do
   let seed = getSeed state
-  eTestdata <- runExceptT $ (arbitrary state) (size state) seed
-  case eTestdata of
+  case arbitrary state (size state) seed of
     Left arbExitCode -> return $ Exception (stateTestName state) Nothing Arb arbExitCode seed
-    Right testdata -> do
-      eResult <- runExceptT $ (property state) testdata
-      case eResult of
+    Right testdata ->
+      case property state testdata of
         Left propExitCode ->
           return $ Exception (stateTestName state) (shower state *< testdata) Test propExitCode seed
         Right result ->
