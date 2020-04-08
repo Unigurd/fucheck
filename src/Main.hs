@@ -344,6 +344,8 @@ nextState state = (cInt, newState)
     cInt         = toEnum int
     newState     = state {randomSeed = newGen}
 
+f *< a = f <*> pure a
+
 someFun :: State -> IO Result
 someFun state = do
   let seed = getSeed state
@@ -354,28 +356,15 @@ someFun state = do
       eResult <- runExceptT $ (property state) testdata
       case eResult of
         Left propExitCode ->
-          case shower state of
-            Nothing -> error "Jeg er for doven til at haandtere ikke-eksisterende shows"
-            Just showerdidum ->
-              case showerdidum testdata of
-                Right str ->
-                  return $ Exception (stateTestName state) (Just (Right str)) Test propExitCode seed
-                Left showExitCode ->
-                  return $ Exception (stateTestName state)
-                                     (Just (Left showExitCode))
-                                     Test
-                                     propExitCode seed
+          return $ Exception (stateTestName state) (shower state *< testdata) Test propExitCode seed
         Right result ->
           if result
           then return Success {resultTestName = stateTestName state, numTests = numSuccessTests state}
           else
-            case shower state of
-              Nothing -> error "for doven til Maybe show"
-              Just showshishow ->
-                return $ Failure { resultTestName = stateTestName state
-                                 , shownInput     = Just $ showshishow testdata
-                                 , resultSeed     = seed
-                                 }
+            return $ Failure { resultTestName = stateTestName state
+                             , shownInput     = shower state *< testdata
+                             , resultSeed     = seed
+                             }
 
 infResults :: State -> IO Result
 infResults state
