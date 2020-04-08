@@ -3,8 +3,7 @@
 
 import Control.Monad ((<=<))
 import System.Environment(getArgs)
---import qualified System.Command as C
---import qualified System.Process as P
+import System.IO.Unsafe (unsafePerformIO)
 import qualified System.Process.Typed as TP
 import System.Exit (ExitCode(ExitSuccess), exitSuccess, exitFailure)
 import System.Directory (createDirectory, doesDirectoryExist)
@@ -27,7 +26,6 @@ import Foreign.C.Types (CInt(CInt))
 import Control.Monad.IO.Class(liftIO)
 import Foreign.C.String (newCString)
 
-uncurry3 f (a,b,c) = f a b c
 
 data Futhark_Context_Config
 data Futhark_Context
@@ -37,7 +35,7 @@ data FutharkTestData
 type ValuesType =  Ptr Futhark_Context
                 -> Ptr Futhark_u8_1d -- Old fut array
                 -> Ptr Word8         -- New array
-                -> IO CInt          -- Error info? Is this the right type?
+                -> CInt
 
 type ArbitraryType =  Ptr Futhark_Context
                    -> Ptr (Ptr FutharkTestData)
@@ -53,7 +51,7 @@ type PropertyType =  Ptr Futhark_Context
 type ShowType =  Ptr Futhark_Context
               -> Ptr (Ptr Futhark_u8_1d)
               -> Ptr FutharkTestData
-              -> IO CInt
+              -> CInt
 
 foreign import ccall "dynamic"
   mkConfig :: FunPtr (IO (Ptr Futhark_Context_Config)) -> IO (Ptr Futhark_Context_Config)
@@ -72,7 +70,10 @@ newFutFreeConfig dl cfg = do
   mkConfigFree f cfg
 
 foreign import ccall "dynamic"
-  mkNewFutContext :: FunPtr (Ptr Futhark_Context_Config -> IO (Ptr Futhark_Context)) -> Ptr Futhark_Context_Config -> IO (Ptr Futhark_Context)
+  mkNewFutContext :: FunPtr (Ptr Futhark_Context_Config
+                  -> IO (Ptr Futhark_Context))
+                  -> Ptr Futhark_Context_Config
+                  -> IO (Ptr Futhark_Context)
 newFutContext :: DL.DL -> Ptr Futhark_Context_Config -> IO (Ptr Futhark_Context)
 newFutContext dl cfg = do
   ctx_fun <- DL.dlsym dl "futhark_context_new"
@@ -84,39 +85,74 @@ freeFutContext dl ctx = do
   f <- DL.dlsym dl "futhark_context_free"
   mkContextFree f ctx
 
----- Get dimensions of fut array
---foreign import ccall
---  oldfuthark_shape_u8_1d :: Ptr Futhark_Context
---                      -> Ptr Futhark_u8_1d       -- Array.
---                      -> IO (Ptr Int)            -- size
-
---oldfutShape :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO Int
---oldfutShape ctx futArr = do
-
 foreign import ccall "dynamic"
-  mkFutShape :: FunPtr (Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr CInt))
-             ->         Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr CInt)
+  mkFutShape :: FunPtr (Ptr Futhark_Context -> Ptr Futhark_u8_1d -> Ptr CInt)
+             ->         Ptr Futhark_Context -> Ptr Futhark_u8_1d -> Ptr CInt
 
-futShape :: DL.DL -> Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO CInt
-futShape dl ctx futArr = do
+futShape :: DL.DL -> IO (Ptr Futhark_Context -> Ptr Futhark_u8_1d -> CInt)
+futShape dl = do
   f <- DL.dlsym dl "futhark_shape_u8_1d"
-  shapePtr <- mkFutShape f ctx futArr
-  peek shapePtr
+  return (\ctx futArr ->
+    -- We're just reading local state,
+    -- so I believe it's alright to
+    -- perform IO unsafely
+    unsafePerformIO $ peek $ mkFutShape f ctx futArr)
+
+haskifyArr2 :: CInt -> (i -> Ptr Word8 -> CInt) -> i -> IO (Either CInt [Word8])
+haskifyArr2 size c_fun input =
+  allocaArray (fromIntegral size) $ (\outPtr -> do
+    let exitcode = c_fun input outPtr
+    if exitcode == 0
+      then (return . Right) =<< peekArray (fromIntegral size) outPtr
+      else return $ Left exitcode)
 
 foreign import ccall "dynamic"
   mkFutValues :: FunPtr ValuesType -> ValuesType
 mkValues :: DL.DL
+         -> IO (  Ptr Futhark_Context
+               -> Ptr Futhark_u8_1d
+               -> Either CInt String)
+mkValues dl = do
+  shapeFun  <- futShape dl
+  valuesFun <- mkFutValues <$> DL.dlsym dl "futhark_values_u8_1d"
+  return (\ctx futArr -> unsafePerformIO $ do
+             eitherArr <- haskifyArr2 (shapeFun ctx futArr) (valuesFun ctx) futArr
+             case eitherArr of
+               Right hsList -> do
+                 return $ Right $ decode hsList
+               Left errorcode -> return $ Left errorcode)
+
+haskify3 :: Storable out
+         => (Ptr Futhark_Context -> Ptr out -> input -> CInt)
          -> Ptr Futhark_Context
-         -> FunPtr ValuesType
-         -> Ptr Futhark_u8_1d
-         -> ExceptT CInt IO String
-mkValues dl ctx valuesPtr futArr = ExceptT $ do
-  shape <- futShape dl ctx futArr
-  eitherArr <- runExceptT $ haskifyArr (fromIntegral shape) (mkFutValues valuesPtr ctx) futArr
-  case eitherArr of
-    Right hsList -> do
-      return $ Right $ decode hsList
-    Left errorcode -> return $ Left errorcode
+         -> input
+         -> IO (Either CInt out)
+haskify3 c_fun ctx input =
+  alloca $ (\outPtr -> do
+    let exitcode = c_fun ctx outPtr input
+    if exitcode == 0
+    then Right <$> peek outPtr
+    else return $ Left exitcode)
+
+--type ShowType =  Ptr Futhark_Context
+--              -> Ptr (Ptr Futhark_u8_1d)
+--              -> Ptr FutharkTestData
+--              -> IO CInt
+
+foreign import ccall "dynamic"
+  mkFutShow :: FunPtr ShowType -> ShowType
+mkShow :: DL.DL
+       -> Ptr Futhark_Context
+       -> String
+       -> IO (Ptr FutharkTestData -> Either CInt String)
+mkShow dl ctx name = do
+  showPtr   <- DL.dlsym dl ("futhark_entry_" ++ name)
+  futValues <- mkValues dl
+  return $ \input -> unsafePerformIO $ do
+    eU8arr <- haskify3 (mkFutShow showPtr) ctx input
+    case eU8arr of
+      Right u8arr   -> return $ futValues ctx u8arr
+      Left exitCode -> return $ Left exitCode
 
 foreign import ccall "dynamic"
   mkFutArb :: FunPtr ArbitraryType -> ArbitraryType
@@ -130,16 +166,6 @@ foreign import ccall "dynamic"
 mkProperty dl ctx name = do
   propPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
   return $ haskify (mkFutProp propPtr) ctx
-
-
-foreign import ccall "dynamic"
-  mkFutShow :: FunPtr ShowType -> ShowType
-mkShow dl ctx name = do
-  showPtr   <- DL.dlsym dl ("futhark_entry_" ++ name)
-  futValues <- DL.dlsym dl "futhark_values_u8_1d"
-  return $ \input -> do
-    u8arr <- haskify (mkFutShow showPtr) ctx input
-    mkValues dl ctx futValues u8arr
 
 
 haskify :: Storable out
@@ -175,34 +201,7 @@ haskifyArr size c_fun input =
     else return $ Left exitcode)
 
 
----- New []u8
---foreign import ccall "futhark_new_i8_1d"
---  oldfutNewArru8 :: Ptr Futhark_Context
---              -> Ptr Word8              -- The old array
---              -> Ptr Int64              -- The size
---              -> IO (Ptr Futhark_u8_1d) -- The fut array
---
----- Move to C array
---foreign import ccall
---  oldfuthark_values_u8_1d :: Ptr Futhark_Context
---                       -> Ptr Futhark_u8_1d -- Old fut array
---                       -> Ptr Word8         -- New array
---                       -> IO CInt          -- Error info? Is this the right type?
---
---
---oldfutValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> ExceptT CInt IO String
---oldfutValues ctx futArr = ExceptT $ do
---  shape <- futShape ctx futArr
---  eitherArr <- runExceptT $ haskifyArr shape (oldfuthark_values_u8_1d ctx) futArr
---  case eitherArr of
---    Right hsList -> do
---      return $ Right $ decode hsList
---    Left errorcode -> return $ Left errorcode
---
---
-
-
-
+uncurry3 f (a,b,c) = f a b c
 
 spaces = ' ':spaces
 
@@ -237,8 +236,6 @@ crashMessage name seed messages = crashMessage
     crashMessage         = crashLine:(indent 2 <$> linesWithDescription)
 
 
-
-
 data Stage = Arb | Test | Show
 stage2str Arb  = "arbitrary"
 stage2str Test = "property"
@@ -250,15 +247,18 @@ data Result =
     , numTests       :: Integer
     }
   | Failure
+    { resultTestName :: String
     -- Nothing if no attempt at showing could be made
     -- Just Left if it tried to generate a string but failed
     -- Just Right if a string was successfully generated
-    { resultTestName :: String
     , shownInput     :: Maybe (Either CInt String)
     , resultSeed     :: CInt
     }
   | Exception
     { resultTestName :: String
+    -- Nothing if no attempt at showing could be made
+    -- Just Left if it tried to generate a string but failed
+    -- Just Right if a string was successfully generated
     , shownInput     :: Maybe (Either CInt String)
     , errorStatge    :: Stage
     , futExitCode    :: CInt
@@ -269,7 +269,7 @@ data State = MkState
   { stateTestName   :: String
   , arbitrary       :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
   , property        :: Ptr FutharkTestData -> ExceptT CInt IO Bool
-  , shower          :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
+  , shower          :: Maybe (Ptr FutharkTestData -> Either CInt String)
   , maxSuccessTests :: Integer
   , numSuccessTests :: Integer
   , computeSize     :: Int -> CInt
@@ -299,7 +299,7 @@ newFutFunNames name = FutFunNames
 data FutFuns = MkFuns
   { futArb  :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
   , futProp :: Ptr FutharkTestData -> ExceptT CInt IO Bool
-  , futShow :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
+  , futShow :: Maybe (Ptr FutharkTestData -> Either CInt String)
   }
 
 
@@ -356,22 +356,24 @@ someFun state = do
         Left propExitCode ->
           case shower state of
             Nothing -> error "Jeg er for doven til at haandtere ikke-eksisterende shows"
-            Just showerdidum -> do
-              eStr <- runExceptT $ showerdidum testdata
-              case eStr of
-                Right str -> return $ Exception (stateTestName state) (Just (Right str)) Test propExitCode seed
+            Just showerdidum ->
+              case showerdidum testdata of
+                Right str ->
+                  return $ Exception (stateTestName state) (Just (Right str)) Test propExitCode seed
                 Left showExitCode ->
-                  return $ Exception (stateTestName state) (Just (Left showExitCode)) Test propExitCode seed
+                  return $ Exception (stateTestName state)
+                                     (Just (Left showExitCode))
+                                     Test
+                                     propExitCode seed
         Right result ->
           if result
           then return Success {resultTestName = stateTestName state, numTests = numSuccessTests state}
           else
             case shower state of
               Nothing -> error "for doven til Maybe show"
-              Just showshishow -> do
-                eStrInput <- runExceptT $ showshishow testdata
+              Just showshishow ->
                 return $ Failure { resultTestName = stateTestName state
-                                 , shownInput     = Just eStrInput
+                                 , shownInput     = Just $ showshishow testdata
                                  , resultSeed     = seed
                                  }
 
