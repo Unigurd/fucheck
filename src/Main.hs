@@ -27,22 +27,10 @@ import Foreign.C.Types (CInt(CInt))
 import Control.Monad.IO.Class(liftIO)
 import Foreign.C.String (newCString)
 
+uncurry3 f (a,b,c) = f a b c
+
 data Futhark_Context_Config
-foreign import ccall "futhark_context_config_new"
-  oldFutNewConfig:: IO (Ptr Futhark_Context_Config)
-
-foreign import ccall "futhark_context_config_set_debugging"
-  oldSetDebug :: Ptr Futhark_Context_Config -> CInt -> IO ()
-
 data Futhark_Context
-foreign import ccall "futhark_context_new"
-  oldFutNewContext :: Ptr Futhark_Context_Config -> IO (Ptr Futhark_Context)
-
-foreign import ccall "futhark_context_free"
-  oldFutFreeContext :: Ptr Futhark_Context -> IO ()
-
-foreign import ccall "futhark_context_config_free"
-  oldFutFreeConfig :: Ptr Futhark_Context_Config -> IO ()
 
 data Futhark_u8_1d
 data FutharkTestData
@@ -66,10 +54,6 @@ type ShowType =  Ptr Futhark_Context
               -> Ptr (Ptr Futhark_u8_1d)
               -> Ptr FutharkTestData
               -> IO CInt
-
-foreign import ccall "dynamic"
-  mkSetDebug :: FunPtr (Ptr Futhark_Context_Config -> CInt -> IO ())
-             ->         Ptr Futhark_Context_Config -> CInt -> IO () -- Svarer IO () til void?
 
 foreign import ccall "dynamic"
   mkConfig :: FunPtr (IO (Ptr Futhark_Context_Config)) -> IO (Ptr Futhark_Context_Config)
@@ -100,12 +84,35 @@ freeFutContext dl ctx = do
   f <- DL.dlsym dl "futhark_context_free"
   mkContextFree f ctx
 
+---- Get dimensions of fut array
+--foreign import ccall
+--  oldfuthark_shape_u8_1d :: Ptr Futhark_Context
+--                      -> Ptr Futhark_u8_1d       -- Array.
+--                      -> IO (Ptr Int)            -- size
+
+--oldfutShape :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO Int
+--oldfutShape ctx futArr = do
+
+foreign import ccall "dynamic"
+  mkFutShape :: FunPtr (Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr CInt))
+             ->         Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr CInt)
+
+futShape :: DL.DL -> Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO CInt
+futShape dl ctx futArr = do
+  f <- DL.dlsym dl "futhark_shape_u8_1d"
+  shapePtr <- mkFutShape f ctx futArr
+  peek shapePtr
+
 foreign import ccall "dynamic"
   mkFutValues :: FunPtr ValuesType -> ValuesType
-mkValues :: Ptr Futhark_Context -> FunPtr ValuesType -> Ptr Futhark_u8_1d -> ExceptT CInt IO String
-mkValues ctx valuesPtr futArr = ExceptT $ do
-  shape <- futShape ctx futArr
-  eitherArr <- runExceptT $ haskifyArr shape (mkFutValues valuesPtr ctx) futArr
+mkValues :: DL.DL
+         -> Ptr Futhark_Context
+         -> FunPtr ValuesType
+         -> Ptr Futhark_u8_1d
+         -> ExceptT CInt IO String
+mkValues dl ctx valuesPtr futArr = ExceptT $ do
+  shape <- futShape dl ctx futArr
+  eitherArr <- runExceptT $ haskifyArr (fromIntegral shape) (mkFutValues valuesPtr ctx) futArr
   case eitherArr of
     Right hsList -> do
       return $ Right $ decode hsList
@@ -132,7 +139,7 @@ mkShow dl ctx name = do
   futValues <- DL.dlsym dl "futhark_values_u8_1d"
   return $ \input -> do
     u8arr <- haskify (mkFutShow showPtr) ctx input
-    mkValues ctx futValues u8arr
+    mkValues dl ctx futValues u8arr
 
 
 haskify :: Storable out
@@ -161,48 +168,39 @@ haskify2 c_fun ctx input1 input2 =
     else return $ Left exitcode)
 
 haskifyArr size c_fun input =
-  ExceptT $ allocaArray size $ (\outPtr -> do
+  ExceptT $ allocaArray (fromIntegral size) $ (\outPtr -> do
     exitcode <- c_fun input outPtr
     if exitcode == 0
     then (return . Right) =<< peekArray size outPtr
     else return $ Left exitcode)
 
 
--- New []u8
-foreign import ccall "futhark_new_i8_1d"
-  futNewArru8 :: Ptr Futhark_Context
-              -> Ptr Word8              -- The old array
-              -> Ptr Int64              -- The size
-              -> IO (Ptr Futhark_u8_1d) -- The fut array
+---- New []u8
+--foreign import ccall "futhark_new_i8_1d"
+--  oldfutNewArru8 :: Ptr Futhark_Context
+--              -> Ptr Word8              -- The old array
+--              -> Ptr Int64              -- The size
+--              -> IO (Ptr Futhark_u8_1d) -- The fut array
+--
+---- Move to C array
+--foreign import ccall
+--  oldfuthark_values_u8_1d :: Ptr Futhark_Context
+--                       -> Ptr Futhark_u8_1d -- Old fut array
+--                       -> Ptr Word8         -- New array
+--                       -> IO CInt          -- Error info? Is this the right type?
+--
+--
+--oldfutValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> ExceptT CInt IO String
+--oldfutValues ctx futArr = ExceptT $ do
+--  shape <- futShape ctx futArr
+--  eitherArr <- runExceptT $ haskifyArr shape (oldfuthark_values_u8_1d ctx) futArr
+--  case eitherArr of
+--    Right hsList -> do
+--      return $ Right $ decode hsList
+--    Left errorcode -> return $ Left errorcode
+--
+--
 
--- Move to C array
-foreign import ccall
-  futhark_values_u8_1d :: Ptr Futhark_Context
-                       -> Ptr Futhark_u8_1d -- Old fut array
-                       -> Ptr Word8         -- New array
-                       -> IO CInt          -- Error info? Is this the right type?
-
-
-futValues :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> ExceptT CInt IO String
-futValues ctx futArr = ExceptT $ do
-  shape <- futShape ctx futArr
-  eitherArr <- runExceptT $ haskifyArr shape (futhark_values_u8_1d ctx) futArr
-  case eitherArr of
-    Right hsList -> do
-      return $ Right $ decode hsList
-    Left errorcode -> return $ Left errorcode
-
-
--- Get dimensions of fut array
-foreign import ccall
-  futhark_shape_u8_1d :: Ptr Futhark_Context
-                      -> Ptr Futhark_u8_1d       -- Array.
-                      -> IO (Ptr Int)            -- size
-
-futShape :: Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO Int
-futShape ctx futArr = do
-  shapePtr <- futhark_shape_u8_1d ctx futArr
-  peek shapePtr
 
 
 
@@ -230,10 +228,10 @@ funCrash stage messages = crashMessage
     restLines       = formatMessages messages
     crashMessage    = stage:(indent 2 <$> restLines)
 
-crashMessage :: CInt -> [(String,[(String,String)])] -> [String]
-crashMessage seed messages = crashMessage
+crashMessage :: String -> CInt -> [(String,[(String,String)])] -> [String]
+crashMessage name seed messages = crashMessage
   where
-    crashLine = ("Futhark crashed on seed " ++ show seed)
+    crashLine = ("Property " ++ name ++ " crashed on seed " ++ show seed)
     lines                = uncurry funCrash =<< messages
     linesWithDescription = "in function(s)":(indent 2 <$> lines)
     crashMessage         = crashLine:(indent 2 <$> linesWithDescription)
@@ -246,42 +244,82 @@ stage2str Arb  = "arbitrary"
 stage2str Test = "property"
 stage2str Show = "show"
 
-data Result = Success
-            | Failure (Either CInt String) CInt              -- input, seed
-            | Exception (Maybe (Either CInt String)) Stage CInt CInt -- input, stage, error code, seed
+data Result =
+    Success
+    { resultTestName :: String
+    , numTests       :: Integer
+    }
+  | Failure
+    -- Nothing if no attempt at showing could be made
+    -- Just Left if it tried to generate a string but failed
+    -- Just Right if a string was successfully generated
+    { resultTestName :: String
+    , shownInput     :: Maybe (Either CInt String)
+    , resultSeed     :: CInt
+    }
+  | Exception
+    { resultTestName :: String
+    , shownInput     :: Maybe (Either CInt String)
+    , errorStatge    :: Stage
+    , futExitCode    :: CInt
+    , resultSeed     :: CInt
+    }
 
--- futArbitrary :: Ptr Futhark_Context -> CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
--- futProperty :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT CInt IO Bool
--- futShow :: Ptr Futhark_Context -> Ptr FutharkTestData -> ExceptT CInt IO String
 data State = MkState
-  { arbitrary       :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
+  { stateTestName   :: String
+  , arbitrary       :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
   , property        :: Ptr FutharkTestData -> ExceptT CInt IO Bool
-  , shower          :: Ptr FutharkTestData -> ExceptT CInt IO String
-  , maxSuccessTests :: Int
+  , shower          :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
+  , maxSuccessTests :: Integer
+  , numSuccessTests :: Integer
   , computeSize     :: Int -> CInt
-  , numSuccessTests :: Int
   , randomSeed      :: StdGen
+  }
+
+data FutFunNames = FutFunNames
+  { ffTestName :: String
+  , arbName    :: String
+  , propName   :: String
+  , showName   :: String
+  , arbFound   :: Bool
+  , propFound  :: Bool
+  , showFound  :: Bool
+  }
+
+newFutFunNames name = FutFunNames
+  { ffTestName = name
+  , arbName    = name ++ "arbitrary"
+  , propName   = name ++ "property"
+  , showName   = name ++ "show"
+  , arbFound   = False
+  , propFound  = False
+  , showFound  = False
   }
 
 data FutFuns = MkFuns
   { futArb  :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
   , futProp :: Ptr FutharkTestData -> ExceptT CInt IO Bool
-  , futShow :: Ptr FutharkTestData -> ExceptT CInt IO String
+  , futShow :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
   }
 
-loadFutFuns dl ctx test = do
-  dynArb  <- mkArbitrary dl ctx $ test ++ "arbitrary"
-  dynProp <- mkProperty  dl ctx $ test ++ "property"
-  dynShow <- mkShow      dl ctx $ test ++ "show"
+
+
+loadFutFuns dl ctx testNames = do
+  dynArb  <- mkArbitrary dl ctx $ arbName testNames
+  dynProp <- mkProperty  dl ctx $ propName testNames
+  dynShow <- if showFound testNames
+             then Just <$> mkShow dl ctx (showName testNames)
+             else return Nothing
   return MkFuns { futArb  = dynArb
                 , futProp = dynProp
                 , futShow = dynShow
                 }
 
-mkDefaultState :: StdGen -> FutFuns -> State
-mkDefaultState gen fs =
+mkDefaultState :: String -> StdGen -> FutFuns -> State
+mkDefaultState testName gen fs =
   MkState
-  { arbitrary       = futArb fs
+  { stateTestName   = testName
+  , arbitrary       = futArb fs
   , property        = futProp fs
   , shower          = futShow fs
   , maxSuccessTests = 100
@@ -292,7 +330,7 @@ mkDefaultState gen fs =
   }
 
 size :: State -> CInt
-size state = (computeSize state (numSuccessTests state))
+size state = (computeSize state (fromIntegral $ numSuccessTests state))
 
 getSeed :: State -> CInt
 getSeed = toEnum . fst . next . randomSeed
@@ -311,54 +349,66 @@ someFun state = do
   let seed = getSeed state
   eTestdata <- runExceptT $ (arbitrary state) (size state) seed
   case eTestdata of
-    Left arbExitCode -> return $ Exception Nothing Arb arbExitCode seed
+    Left arbExitCode -> return $ Exception (stateTestName state) Nothing Arb arbExitCode seed
     Right testdata -> do
       eResult <- runExceptT $ (property state) testdata
       case eResult of
-        Left propExitCode -> do
-          eStr <- runExceptT $ (shower state) testdata
-          case eStr of
-            Right str -> return $ Exception (Just (Right str)) Test propExitCode seed
-            Left showExitCode -> return $ Exception (Just (Left showExitCode)) Test propExitCode seed
+        Left propExitCode ->
+          case shower state of
+            Nothing -> error "Jeg er for doven til at haandtere ikke-eksisterende shows"
+            Just showerdidum -> do
+              eStr <- runExceptT $ showerdidum testdata
+              case eStr of
+                Right str -> return $ Exception (stateTestName state) (Just (Right str)) Test propExitCode seed
+                Left showExitCode ->
+                  return $ Exception (stateTestName state) (Just (Left showExitCode)) Test propExitCode seed
         Right result ->
           if result
-          then return Success
-          else do
-            eStrInput <- runExceptT $ (shower state) testdata
-            return $ Failure eStrInput seed
+          then return Success {resultTestName = stateTestName state, numTests = numSuccessTests state}
+          else
+            case shower state of
+              Nothing -> error "for doven til Maybe show"
+              Just showshishow -> do
+                eStrInput <- runExceptT $ showshishow testdata
+                return $ Failure { resultTestName = stateTestName state
+                                 , shownInput     = Just eStrInput
+                                 , resultSeed     = seed
+                                 }
 
 infResults :: State -> IO Result
 infResults state
-  | numSuccessTests state >= maxSuccessTests state = return Success
+  | numSuccessTests state >= maxSuccessTests state = return $ Success
+                                                     { resultTestName = stateTestName state
+                                                     , numTests       = numSuccessTests state
+                                                     }
   | otherwise = do
   result <- someFun state
   case result of
-    Success -> infResults $ state { numSuccessTests = numSuccessTests state + 1
-                                  , randomSeed      = nextGen state
-                                  }
+    Success _ _ -> infResults $ state { numSuccessTests = numSuccessTests state + 1
+                                      , randomSeed      = nextGen state
+                                      }
     _       -> return result
 
 result2str :: Result -> String
-result2str Success = "Success!"
-result2str (Failure (Right str) seed) =
-  "Test failed on input " ++ iStr
-  where
-    iStr = unlines $ indent 2 <$> lines str
-result2str (Failure (Left exitCode) seed) =
-  unlines $ ("Test failed on seed " ++ show seed)
-  : crashMessage seed [("show",[("Exit code", show exitCode)])]
-result2str (Exception Nothing stage exitCode seed) =
-  unlines $ crashMessage seed [((stage2str stage),[("Exit code", show exitCode)])]
+result2str (Success name numTests) = "Property " ++ name ++ " holds after " ++ show numTests ++ " tests"
+result2str (Failure name Nothing seed) =
+  "Property " ++ name ++ " failed on seed " ++ show seed
+result2str (Failure name (Just (Right str)) _) =
+  "Property " ++ name ++ " failed on input " ++ str
+result2str (Failure name (Just (Left exitCode)) seed) =
+  unlines $ ("Property " ++ name ++ " failed on seed " ++ show seed)
+  : crashMessage name seed [("show",[("Exit code", show exitCode)])]
+result2str (Exception name Nothing stage exitCode seed) =
+  unlines $ crashMessage name seed [((stage2str stage),[("Exit code", show exitCode)])]
+result2str (Exception name (Just (Right input)) stage exitCode seed) =
+  unlines $ crashMessage name seed [((stage2str stage), [ ("Input", input)
+                                                        , ("Exit code", show exitCode)
+                                                        ])]
 
-result2str (Exception (Just (Right input)) stage exitCode seed) =
-  unlines $ crashMessage seed [((stage2str stage), [ ("Input", input)
-                                                   , ("Exit code", show exitCode)
-                                                   ])]
-
-result2str (Exception (Just (Left showExitCode)) stage exitCode seed) =
-  unlines $ crashMessage seed [ ((stage2str stage),[("Exit code", show exitCode)])
-                              , ("show", [("Exit code", show showExitCode)])
-                              ]
+result2str (Exception name (Just (Left showExitCode)) stage exitCode seed) =
+  unlines $ crashMessage name seed [ ((stage2str stage),[("Exit code", show exitCode)])
+                                   , ("show", [("Exit code", show showExitCode)])
+                                   ]
 
 filterMap :: (a -> Maybe b) -> [a] -> [b]
 filterMap f = foldr (\elm acc -> case f elm of
@@ -368,11 +418,36 @@ filterMap f = foldr (\elm acc -> case f elm of
 getTestName ["--", "fucheck", name] = Just name
 getTestName _                       = Nothing
 
-findTests :: String -> [String]
+mapPerhaps :: (a -> Maybe a) -> [a] -> [a]
+mapPerhaps f l = foldr (\elm acc -> case f elm of ; Nothing -> elm:acc ; Just newElm -> newElm:acc) [] l
+
+funNameMatches ("entry":actualName:_) expectedName = actualName == expectedName
+funNameMatches _ _ = False
+
+anyFunNameMatches line ffns =
+  if matchesLine $ arbName ffns
+  then Just $ ffns {arbFound = True}
+  else if matchesLine $ propName ffns
+       then Just $ ffns {propFound = True}
+       else if matchesLine $ showName ffns
+            then Just $ ffns {showFound = True}
+            else Nothing
+  where matchesLine = funNameMatches line
+
+
+
+checkLine foundFuns line =
+  case getTestName line of
+    Just newName -> newFutFunNames newName : foundFuns
+    Nothing      -> mapPerhaps (anyFunNameMatches line) foundFuns
+
+findTests :: String -> [FutFunNames]
 findTests source = tests
   where
     tokens = words <$> lines source
-    tests  = filterMap getTestName tokens
+    tests  = foldl' checkLine [] tokens
+      --filterMap getTestName tokens
+
 
 --myReadProcess :: TP.ProcessConfig stdin stdoutIgnored stderrIgnored ->  ExceptT ExitCode IO (ByteString, ByteString)
 --myReadProcess p = do
@@ -402,7 +477,7 @@ exitOnCompilationError exitCode filename =
 testIOprep dl ctx test = do
   gen <- getStdGen
   futFuns <- loadFutFuns dl ctx test
-  return (gen,futFuns)
+  return (ffTestName test, gen,futFuns)
 
 
 main :: IO ()
@@ -421,6 +496,9 @@ main = do
   let tmpDir = "/tmp/fucheck/"
   let tmpFile = tmpDir ++ "fucheck-tmp-file"
 
+  fileText <- readFile $ filename ++ ".fut"
+  let testNames = findTests fileText
+
   letThereBeDir tmpDir
 
   (futExitCode, futOut, futErr) <-
@@ -433,15 +511,13 @@ main = do
 
   dl <- DL.dlopen (tmpFile ++ ".so") [DL.RTLD_NOW] -- Read up on flags
 
-  fileText <- readFile $ filename ++ ".fut"
-  let testNames = findTests fileText
   let firstTest = head testNames
 
   cfg <- newFutConfig dl
   ctx <- newFutContext dl cfg
 
   ioPrep <- sequence $ map (testIOprep dl ctx) testNames
-  let states = map (uncurry mkDefaultState) ioPrep
+  let states = map (uncurry3 mkDefaultState) ioPrep
   sequence_ $ map ((putStrLn . result2str) <=< infResults) states
   freeFutContext dl ctx
   newFutFreeConfig dl cfg
