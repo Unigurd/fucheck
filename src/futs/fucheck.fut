@@ -235,8 +235,6 @@ let naiveshrinki32 (data :i32) (i : i32) : maybe i32 =
      then #nothing
      else #just shrunk
 
-
-
 let shrinki32 (data : i32) (i : i32) : maybe i32 =
   -- if data is 0 we shrink it naively
   if data == 0 then naiveshrinki32 data i
@@ -245,7 +243,6 @@ let shrinki32 (data : i32) (i : i32) : maybe i32 =
        in if data > 0 then shrink data i
           -- if data is negative, we also try negating it first
           else augmentShrink (#just (-data)) shrink data i
-
 
 --
 -- Tests
@@ -263,16 +260,6 @@ let zipShow _ : []u8 = "zipShow not implemented"
 
 
 
-let stupidGeni32 : gen (i32, i32) =
-  arbitrarytuple arbitraryi32 arbitraryi32
-
-let stupidTest (input : testdata (i32,i32)) = match input
-  case #testdata (i1, i2) -> i1 == i2
-
-let stupidShow (input : testdata (i32, i32)) = match input
-  case #testdata (i1,i2) -> show2tuple (showdecimali32 i1 ++ "\n") (showdecimali32 i2)
-
-let stupidShrink = shrinktogether shrinki32 shrinki32
 
 
 
@@ -326,25 +313,30 @@ let runTest 't
   in (result, if result then "" else show input)
 
 
--- fucheck stupid
-entry stupidarbitrary (size : size) (seed : i32) : testdata (i32, i32) =
-  --#testdata (1,seed/0)
-  runGen stupidGeni32 size (minstd_rand.rng_from_seed [seed])
-  --#testdata (size/0,7)
+let arbi32 (size : size) (seed : i32) : testdata (i32) =
+  runGen arbitraryi32 size (minstd_rand.rng_from_seed [seed])
 
-entry stupidproperty (input : testdata (i32, i32)) : bool =
-  stupidTest input
-  --match input
-  --case #testdata (x,y) -> x/0 == y
+-- fucheck pass
+entry passarbitrary = arbi32
 
-entry stupidshow (input : testdata (i32, i32)) : []u8 =
-  stupidShow input
+  --runGen (arbitrarytuple arbitraryi32 arbitraryi32) size (minstd_rand.rng_from_seed [seed])
+entry passproperty (input : testdata i32) : bool = match input
+  case #testdata i -> i == i
 
--- fucheck isZero
-entry isZeroshow (input : testdata i32) : []u8 = match input
+entry passshow (input : testdata i32) : []u8 = match input
+  case #testdata i -> showdecimali32 i
+
+-- fucheck failWithShow
+entry failWithShowarbitrary = arbi32
+
+entry failWithShowproperty (input : testdata i32) = match input
+  case #testdata i -> i != i
+
+entry failWithShowshow (input : testdata i32) : []u8 = match input
   case #testdata m -> showdecimali32 m
 
-entry isZeroarbitrary (size : size) (seed : i32) : testdata i32 = runGen arbitraryi32 size (minstd_rand.rng_from_seed [seed])
+-- fucheck failWithoutShow
+entry failWithoutShowarbitrary = arbi32
 
-entry isZeroproperty (input : testdata i32) = match input
-  case #testdata i -> i == 0
+entry failWithoutShowproperty (input : testdata i32) = match input
+  case #testdata i -> i != i
