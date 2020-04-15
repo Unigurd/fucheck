@@ -23,7 +23,7 @@ import Foreign.Storable (Storable, peek)
 import Data.List (unfoldr, foldl')
 import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT,throwE)
-import Foreign.C.Types (CInt(CInt))
+import Foreign.C.Types (CInt(CInt),CBool(CBool))
 import Control.Monad.IO.Class(liftIO)
 import Foreign.C.String (newCString)
 
@@ -46,7 +46,7 @@ type ArbitraryType =  Ptr Futhark_Context
                    -> IO CInt
 
 type PropertyType =  Ptr Futhark_Context
-                  -> Ptr Bool
+                  -> Ptr CBool
                   -> Ptr FutharkTestData
                   -> IO CInt
 
@@ -129,8 +129,18 @@ foreign import ccall "dynamic"
   mkFutProp :: FunPtr PropertyType -> PropertyType
 mkProperty dl ctx name = do
   propPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
-  return $ haskify (mkFutProp propPtr) ctx
+  return $ \input -> (0 /=) <$> (haskify (mkFutProp propPtr) ctx input)
 
+type PropTest =  Ptr Futhark_Context
+              -> Ptr CInt
+              -> Ptr FutharkTestData
+              -> IO CInt
+
+foreign import ccall "dynamic"
+  mkFutPropTest :: FunPtr PropTest -> PropTest
+mkPT dl ctx name = do
+  propPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
+  return $ haskify (mkFutPropTest propPtr) ctx
 
 foreign import ccall "dynamic"
   mkFutShow :: FunPtr ShowType -> ShowType
@@ -269,6 +279,7 @@ data State = MkState
   { stateTestName   :: String
   , arbitrary       :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
   , property        :: Ptr FutharkTestData -> ExceptT CInt IO Bool
+  , propTest        :: Ptr FutharkTestData -> ExceptT CInt IO CInt
   , shower          :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
   , maxSuccessTests :: Integer
   , numSuccessTests :: Integer
@@ -300,6 +311,7 @@ data FutFuns = MkFuns
   { futArb  :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
   , futProp :: Ptr FutharkTestData -> ExceptT CInt IO Bool
   , futShow :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
+  , futPropTest :: Ptr FutharkTestData -> ExceptT CInt IO CInt
   }
 
 
@@ -310,9 +322,11 @@ loadFutFuns dl ctx testNames = do
   dynShow <- if showFound testNames
              then Just <$> mkShow dl ctx (showName testNames)
              else return Nothing
+  dynPropTest <- mkPT  dl ctx $ propName testNames
   return MkFuns { futArb  = dynArb
                 , futProp = dynProp
                 , futShow = dynShow
+                , futPropTest = dynPropTest
                 }
 
 mkDefaultState :: String -> StdGen -> FutFuns -> State
@@ -322,6 +336,7 @@ mkDefaultState testName gen fs =
   , arbitrary       = futArb fs
   , property        = futProp fs
   , shower          = futShow fs
+  , propTest    = futPropTest fs
   , maxSuccessTests = 100
   , computeSize     = toEnum . \n ->  n
     -- (maxSuccessTests state) - (maxSuccessTests state) `div` (n+1)
@@ -358,10 +373,10 @@ someFun state = do
         Left propExitCode -> do
           shownInput <- sequence $ runExceptT <$> shower state *< testdata
           return $ Exception (stateTestName state) shownInput Test propExitCode seed
-        Right result ->
-          if result
-          then return Success {resultTestName = stateTestName state, numTests = numSuccessTests state}
-          else do
+        Right result -> do
+          if result -- (result /= 0)
+            then return Success {resultTestName = stateTestName state, numTests = numSuccessTests state}
+            else do
             shownInput2 <- sequence $ runExceptT <$> shower state *< testdata
             return $ Failure { resultTestName = stateTestName state
                              , shownInput     = shownInput2
