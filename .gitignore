@@ -4,3 +4,5 @@ fucheck.hi
 fucheck.o
 libfucheck.so
 fucheck
+dist-newstyle/*
+dist-newstyle*
