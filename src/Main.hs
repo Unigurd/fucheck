@@ -438,7 +438,8 @@ findTests :: String -> [FutFunNames]
 findTests source = tests
   where
     tokens = words <$> lines source
-    tests  = foldl' checkLine [] tokens
+    -- breaks if using foldr to preserve test order
+    tests  = reverse $ foldl' checkLine [] tokens
       --filterMap getTestName tokens
 
 
