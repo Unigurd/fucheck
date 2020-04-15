@@ -344,6 +344,8 @@ nextState state = (cInt, newState)
     cInt         = toEnum int
     newState     = state {randomSeed = newGen}
 
+f *< a = f <*> pure a
+
 someFun :: State -> IO Result
 someFun state = do
   let seed = getSeed state
@@ -353,27 +355,18 @@ someFun state = do
     Right testdata -> do
       eResult <- runExceptT $ (property state) testdata
       case eResult of
-        Left propExitCode ->
-          case shower state of
-            Nothing -> error "Jeg er for doven til at haandtere ikke-eksisterende shows"
-            Just showerdidum -> do
-              eStr <- runExceptT $ showerdidum testdata
-              case eStr of
-                Right str -> return $ Exception (stateTestName state) (Just (Right str)) Test propExitCode seed
-                Left showExitCode ->
-                  return $ Exception (stateTestName state) (Just (Left showExitCode)) Test propExitCode seed
+        Left propExitCode -> do
+          shownInput <- sequence $ runExceptT <$> shower state *< testdata
+          return $ Exception (stateTestName state) shownInput Test propExitCode seed
         Right result ->
           if result
           then return Success {resultTestName = stateTestName state, numTests = numSuccessTests state}
-          else
-            case shower state of
-              Nothing -> error "for doven til Maybe show"
-              Just showshishow -> do
-                eStrInput <- runExceptT $ showshishow testdata
-                return $ Failure { resultTestName = stateTestName state
-                                 , shownInput     = Just eStrInput
-                                 , resultSeed     = seed
-                                 }
+          else do
+            shownInput2 <- sequence $ runExceptT <$> shower state *< testdata
+            return $ Failure { resultTestName = stateTestName state
+                             , shownInput     = shownInput2
+                             , resultSeed     = seed
+                             }
 
 infResults :: State -> IO Result
 infResults state
