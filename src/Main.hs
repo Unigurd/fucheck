@@ -181,6 +181,39 @@ mkProperty dl ctx name = do
   return $ \input -> unsafePerformIO $ haskify3 (mkFutProp propPtr) ctx input
 
 
+haskify :: Storable out
+        => (Ptr Futhark_Context -> Ptr out -> input -> IO CInt)
+        -> Ptr Futhark_Context
+        -> input
+        -> ExceptT CInt IO out
+haskify c_fun ctx input =
+  ExceptT $ alloca $ (\outPtr -> do
+    exitcode <- c_fun ctx outPtr input
+    if exitcode == 0
+    then (return . Right) =<< peek outPtr
+    else return $ Left exitcode)
+
+haskify2 :: Storable out
+        => (Ptr Futhark_Context -> Ptr out -> input1 -> input2 -> IO CInt)
+        -> Ptr Futhark_Context
+        -> input1
+        -> input2
+        -> ExceptT CInt IO out
+haskify2 c_fun ctx input1 input2 =
+  ExceptT $ alloca $ (\outPtr -> do
+    exitcode <- c_fun ctx outPtr input1 input2
+    if exitcode == 0
+    then (return . Right) =<< peek outPtr
+    else return $ Left exitcode)
+
+haskifyArr size c_fun input =
+  ExceptT $ allocaArray (fromIntegral size) $ (\outPtr -> do
+    exitcode <- c_fun input outPtr
+    if exitcode == 0
+    then (return . Right) =<< peekArray size outPtr
+    else return $ Left exitcode)
+
+
 uncurry3 f (a,b,c) = f a b c
 
 spaces = ' ':spaces
@@ -414,8 +447,7 @@ findTests :: String -> [FutFunNames]
 findTests source = tests
   where
     tokens = words <$> lines source
-    -- breaks if using foldr to preserve test order
-    tests  = reverse $ foldl' checkLine [] tokens
+    tests  = foldl' checkLine [] tokens
       --filterMap getTestName tokens
 
 
