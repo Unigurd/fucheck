@@ -4,7 +4,6 @@
 import Control.Monad ((<=<))
 import System.Environment(getArgs)
 import System.IO.Unsafe (unsafePerformIO)
-import System.IO.Error (tryIOError)
 import qualified System.Process.Typed as TP
 import System.Exit (ExitCode(ExitSuccess), exitSuccess, exitFailure)
 import System.Directory (createDirectory, doesDirectoryExist)
@@ -53,17 +52,6 @@ type ShowType =  Ptr Futhark_Context
               -> Ptr (Ptr Futhark_u8_1d)
               -> Ptr FutharkTestData
               -> CInt
-
-myDlsym :: DL.DL -> String -> IO (FunPtr f)
-myDlsym dl fname = do
-  eitherFun <- tryIOError $ DL.dlsym dl fname
-  case eitherFun of
-    Right fun -> return fun
-    Left msg  -> error $ "Could not find symbol " ++ fname ++ "."
-
-dlsymEither :: DL.DL -> String -> ExceptT IOError IO (FunPtr f)
-dlsymEither dl fname = do
-  ExceptT $ tryIOError $ DL.dlsym dl fname
 
 foreign import ccall "dynamic"
   mkConfig :: FunPtr (IO (Ptr Futhark_Context_Config)) -> IO (Ptr Futhark_Context_Config)
@@ -164,10 +152,10 @@ foreign import ccall "dynamic"
 mkShow :: DL.DL
        -> Ptr Futhark_Context
        -> String
-       -> ExceptT IOError IO (Ptr FutharkTestData -> Either CInt String)
+       -> IO (Ptr FutharkTestData -> Either CInt String)
 mkShow dl ctx name = do
-  showPtr   <- dlsymEither dl ("futhark_entry_" ++ name)
-  futValues <- ExceptT $ return <$> mkValues dl
+  showPtr   <- DL.dlsym dl ("futhark_entry_" ++ name)
+  futValues <- mkValues dl
   return $ \input -> unsafePerformIO $ do
     eU8arr <- haskify3 (mkFutShow showPtr) ctx input
     case eU8arr of
@@ -182,7 +170,7 @@ mkArbitrary :: DL.DL
             -> String
             -> IO (CInt -> CInt -> Either CInt (Ptr FutharkTestData))
 mkArbitrary dl ctx name = do
-  arbPtr <- myDlsym dl ("futhark_entry_" ++ name)
+  arbPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
   return $ (\i1 i2 -> unsafePerformIO $ haskify4 (mkFutArb arbPtr) ctx i1 i2)
 
 foreign import ccall "dynamic"
@@ -295,14 +283,13 @@ data FutFuns = MkFuns
   }
 
 
-loadFutFuns dl ctx testName = do
-  dynArb  <- mkArbitrary dl ctx $ testName ++ "arbitrary"
-  dynProp <- mkProperty  dl ctx $ testName ++ "property"
-  eitherDynShow <- runExceptT $  mkShow dl ctx $ testName ++ "show"
-  let dynShow =
-        case eitherDynShow of
-          Right fun -> Just fun
-          Left _    -> Nothing
+
+loadFutFuns dl ctx testNames = do
+  dynArb  <- mkArbitrary dl ctx $ arbName testNames
+  dynProp <- mkProperty  dl ctx $ propName testNames
+  dynShow <- if showFound testNames
+             then Just <$> mkShow dl ctx (showName testNames)
+             else return Nothing
   return MkFuns { futArb  = dynArb
                 , futProp = dynProp
                 , futShow = dynShow
@@ -392,6 +379,11 @@ result2str (Exception name (Just (Left showExitCode)) stage exitCode seed) =
                                    , ("show", [("Exit code", show showExitCode)])
                                    ]
 
+filterMap :: (a -> Maybe b) -> [a] -> [b]
+filterMap f = foldr (\elm acc -> case f elm of
+                          Just x  -> x:acc
+                          Nothing -> acc) []
+
 getTestName ["--", "fucheck", name] = Just name
 getTestName _                       = Nothing
 
@@ -412,20 +404,19 @@ anyFunNameMatches line ffns =
   where matchesLine = funNameMatches line
 
 
-filterMap :: (a -> Maybe b) -> [a] -> [b]
-filterMap f = foldr (\elm acc -> case f elm of
-                          Just x  -> x:acc
-                          Nothing -> acc) []
+
 checkLine foundFuns line =
   case getTestName line of
     Just newName -> newFutFunNames newName : foundFuns
     Nothing      -> mapPerhaps (anyFunNameMatches line) foundFuns
 
-findTests :: String -> [String]
+findTests :: String -> [FutFunNames]
 findTests source = tests
   where
     tokens = words <$> lines source
-    tests  = filterMap getTestName tokens --reverse $ foldl' checkLine [] tokens
+    -- breaks if using foldr to preserve test order
+    tests  = reverse $ foldl' checkLine [] tokens
+      --filterMap getTestName tokens
 
 
 --myReadProcess :: TP.ProcessConfig stdin stdoutIgnored stderrIgnored ->  ExceptT ExitCode IO (ByteString, ByteString)
@@ -456,7 +447,7 @@ exitOnCompilationError exitCode filename =
 testIOprep dl ctx test = do
   gen <- getStdGen
   futFuns <- loadFutFuns dl ctx test
-  return (test, gen,futFuns)
+  return (ffTestName test, gen,futFuns)
 
 
 main :: IO ()
