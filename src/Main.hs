@@ -7,17 +7,31 @@ import System.Environment(getArgs)
 import qualified System.Process.Typed as TP
 import System.Exit (ExitCode(ExitSuccess), exitSuccess, exitFailure)
 import qualified System.Posix.DynamicLinker as DL
-import System.Random (getStdGen)
+import System.Random (getStdGen, StdGen)
+import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 
-import FutInterface (newFutConfig, newFutContext, newFutFreeConfig, freeFutContext)
+import FutInterface ( newFutConfig
+                    , newFutContext
+                    , newFutFreeConfig
+                    , freeFutContext
+                    , CInt
+                    , Ptr
+                    , FutharkTestData
+                    )
 import FutFuns (findTests, loadFutFuns, ffTestName)
 import Tests (fucheck, result2str)
 import State (mkDefaultState)
 
 uncurry3 f (a,b,c) = f a b c
 
+
 headWithDefault def []     = def
 headWithDefault _ (head:_) = head
+
+
+
+
+
 
 letThereBeDir dir = do
   dirExists <- doesDirectoryExist dir
