@@ -316,6 +316,9 @@ let runTest 't
 let arbi32 (size : size) (seed : i32) : testdata (i32) =
   runGen arbitraryi32 size (minstd_rand.rng_from_seed [seed])
 
+let arbtup (size : size) (seed : i32) : testdata (i32, i32) =
+  runGen (arbitrarytuple arbitraryi32 arbitraryi32) size (minstd_rand.rng_from_seed [seed])
+
 -- fucheck pass
 entry passarbitrary = arbi32
 
@@ -340,3 +343,15 @@ entry failWithoutShowarbitrary = arbi32
 
 entry failWithoutShowproperty (input : testdata i32) = match input
   case #testdata i -> i != i
+
+-- fucheck tupleMightFail
+entry tupleMightFailarbitrary = arbtup
+
+entry tupleMightFailproperty (input : testdata (i32, i32)) =
+  match input
+  case #testdata (i,j) -> i == j
+
+
+entry tupleMightFailshow (input : testdata (i32,i32)) : []u8 =
+  match input
+  case #testdata (i,j) -> show2tuple (showdecimali32 i) (showdecimali32 j)
