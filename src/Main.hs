@@ -64,7 +64,7 @@ main = do
   --    exitSuccess
   --  EQ -> return ()
 
-  let filename = headWithDefault "src/futs/fucheck" args
+  let filename = headWithDefault "tests" args
   let tmpDir = "/tmp/fucheck/"
   let tmpFile = tmpDir ++ "fucheck-tmp-file"
 
