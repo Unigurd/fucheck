@@ -6,7 +6,9 @@ module FutInterface ( FutharkTestData,
                     , mkArbitrary
                     , mkProperty
                     , mkShow
-                    , mkPT) where
+                    , Ptr
+                    , CInt(CInt)
+                    , CBool(CBool)) where
 
 import Foreign.Ptr (Ptr, FunPtr)--,castFunPtrToPtr,nullFunPtr)
 import Data.Word (Word8)
