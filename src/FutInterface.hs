@@ -1,11 +1,14 @@
-module FutInterface ( FutharkTestData,
-                      newFutConfig
+module FutInterface ( FutharkTestData
+                    , FutState
+                    , newFutConfig
                     , newFutFreeConfig
                     , newFutContext
                     , freeFutContext
                     , mkArbitrary
                     , mkProperty
                     , mkShow
+                    , getFutState
+                    , futMaxTests
                     , Ptr
                     , CInt(CInt)
                     , CBool(CBool)) where
@@ -22,6 +25,7 @@ import Codec.Binary.UTF8.String (decode)
 
 data Futhark_Context_Config
 data Futhark_Context
+data FutState
 
 data Futhark_u8_1d
 data FutharkTestData
@@ -46,14 +50,17 @@ type ShowType =  Ptr Futhark_Context
               -> Ptr FutharkTestData
               -> IO CInt
 
+type StateType = Ptr Futhark_Context
+              -> Ptr (Ptr FutState)
+              -> IO CInt
+
 foreign import ccall "dynamic"
   mkConfig :: FunPtr (IO (Ptr Futhark_Context_Config)) -> IO (Ptr Futhark_Context_Config)
 
 newFutConfig :: DL.DL -> IO (Ptr Futhark_Context_Config)
 newFutConfig dl = do
   funCfg <- DL.dlsym dl "futhark_context_config_new"
-  cfg <- mkConfig funCfg
-  return cfg
+  mkConfig funCfg
 
 foreign import ccall "dynamic"
   mkConfigFree :: FunPtr (Ptr Futhark_Context_Config -> IO ()) -> Ptr Futhark_Context_Config -> IO ()
@@ -75,6 +82,28 @@ freeFutContext dl ctx = do
   f <- DL.dlsym dl "futhark_context_free"
   mkContextFree f ctx
 
+foreign import ccall "dynamic"
+  mkFutState :: FunPtr StateType -> StateType
+getFutState :: DL.DL -> Ptr Futhark_Context -> String -> IO (Ptr FutState)
+getFutState dl ctx name = do
+  futStatePtr <- DL.dlsym dl ("futhark_entry_" ++ name)
+  eitherFutState <- runExceptT $ haskify0 (mkFutState futStatePtr) ctx
+  case eitherFutState of
+    Right futState -> return futState
+    Left exitCode -> error $ "Failed loading " ++ name ++ ".\nFailed with exit code " ++ show exitCode
+
+-- make static
+foreign import ccall "dynamic"
+  mkMaxTests :: FunPtr (Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt)
+                     -> Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt
+
+-- make static
+futMaxTests dl ctx futState = do
+  maxtestsfun <- DL.dlsym dl "futhark_entry_maxtests"
+  eitherMaxTests <- runExceptT $ haskify (mkMaxTests maxtestsfun) ctx futState
+  case eitherMaxTests of
+    Right maxTests -> return $ toInteger maxTests
+    Left exitCode -> error $ "Failed getting maxtests with exit code " ++ show exitCode
 
 foreign import ccall "dynamic"
   mkFutShape :: FunPtr (Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr CInt))
@@ -114,16 +143,6 @@ mkProperty dl ctx name = do
   propPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
   return $ \input -> (0 /=) <$> (haskify (mkFutProp propPtr) ctx input)
 
-type PropTest =  Ptr Futhark_Context
-              -> Ptr CInt
-              -> Ptr FutharkTestData
-              -> IO CInt
-
-foreign import ccall "dynamic"
-  mkFutPropTest :: FunPtr PropTest -> PropTest
-mkPT dl ctx name = do
-  propPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
-  return $ haskify (mkFutPropTest propPtr) ctx
 
 foreign import ccall "dynamic"
   mkFutShow :: FunPtr ShowType -> ShowType
@@ -134,6 +153,16 @@ mkShow dl ctx name = do
     u8arr <- haskify (mkFutShow showPtr) ctx input
     mkValues dl ctx futValues u8arr
 
+haskify0 :: Storable out
+        => (Ptr Futhark_Context -> Ptr out -> IO CInt)
+        -> Ptr Futhark_Context
+        -> ExceptT CInt IO out
+haskify0 c_fun ctx =
+  ExceptT $ alloca $ (\outPtr -> do
+    exitcode <- c_fun ctx outPtr
+    if exitcode == 0
+    then (return . Right) =<< peek outPtr
+    else return $ Left exitcode)
 
 haskify :: Storable out
         => (Ptr Futhark_Context -> Ptr out -> input -> IO CInt)

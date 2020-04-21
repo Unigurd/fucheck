@@ -65,6 +65,8 @@ let num2str prefix stringify base num =
   let (sign, digits) = digify base num
   in showSign sign ++ prefix ++ (map stringify digits)
 
+let showbool b = if b then "true" else "false"
+
 let showdecimali32 = num2str ""   showBase36 10
 let showhexi32     = num2str "0x" showBase36 16
 let showoctali32   = num2str "0o" showBase36 8

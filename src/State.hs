@@ -15,7 +15,7 @@ import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
 
 import FutInterface (FutharkTestData, CInt, Ptr)
-import FutFuns (FutFuns, futArb, futProp, futShow)
+import FutFuns (FutFuns(..))
 
 data State = MkState
   { stateTestName   :: String
@@ -24,7 +24,7 @@ data State = MkState
   , shower          :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
   , maxSuccessTests :: Integer
   , numSuccessTests :: Integer
-  , computeSize     :: Int -> CInt
+  , computeSize     :: Integer -> CInt
   , randomSeed      :: StdGen
   }
 
@@ -50,9 +50,8 @@ mkDefaultState testName gen fs =
   , arbitrary       = futArb fs
   , property        = futProp fs
   , shower          = futShow fs
-  , maxSuccessTests = 100
-  , computeSize     = toEnum . \n ->  n
-    -- (maxSuccessTests state) - (maxSuccessTests state) `div` (n+1)
+  , maxSuccessTests = futMaxSuccessTests fs
+  , computeSize     = fromInteger . \n -> futMaxSuccessTests fs - (futMaxSuccessTests fs `div` (n+1))
   , numSuccessTests = 0
   , randomSeed      = gen
   }

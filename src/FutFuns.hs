@@ -1,8 +1,5 @@
-module FutFuns ( FutFuns
+module FutFuns ( FutFuns(..)
                , ffTestName
-               , futArb
-               , futProp
-               , futShow
                , loadFutFuns
                , findTests
                ) where
@@ -12,13 +9,21 @@ import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 import Foreign.Ptr (Ptr)
 import Data.List (foldl')
 
-import FutInterface (FutharkTestData)
-import FutInterface (mkArbitrary, mkProperty, mkShow, CInt)
+import FutInterface ( FutharkTestData
+                    , FutState
+                    , mkArbitrary
+                    , mkProperty
+                    , mkShow
+                    , getFutState
+                    , futMaxTests
+                    , CInt
+                    )
 
 data FutFuns = MkFuns
-  { futArb  :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
-  , futProp :: Ptr FutharkTestData -> ExceptT CInt IO Bool
-  , futShow :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
+  { futArb   :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
+  , futProp  :: Ptr FutharkTestData -> ExceptT CInt IO Bool
+  , futShow  :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
+  , futMaxSuccessTests :: Integer
   }
 
 -- internal type for parsing tests in a futhark file
@@ -27,17 +32,20 @@ data FutFunNames = FutFunNames
   , arbFound   :: Bool
   , propFound  :: Bool
   , showFound  :: Bool
+  , stateFound :: Bool
   }
 
-arbName  ffnames = ffTestName ffnames ++ "arbitrary"
-propName ffnames = ffTestName ffnames ++ "property"
-showName ffnames = ffTestName ffnames ++ "show"
+arbName   ffnames = ffTestName ffnames ++ "arbitrary"
+propName  ffnames = ffTestName ffnames ++ "property"
+showName  ffnames = ffTestName ffnames ++ "show"
+stateName ffnames = ffTestName ffnames ++ "state"
 
 newFutFunNames name = FutFunNames
   { ffTestName = name
   , arbFound   = False
   , propFound  = False
   , showFound  = False
+  , stateFound = False
   }
 
 findTests :: String -> [FutFunNames]
@@ -54,9 +62,13 @@ loadFutFuns dl ctx testNames = do
   dynShow <- if showFound testNames
              then Just <$> mkShow dl ctx (showName testNames)
              else return Nothing
-  return MkFuns { futArb  = dynArb
-                , futProp = dynProp
-                , futShow = dynShow
+  dynMaxSuccessTests <- if stateFound testNames
+                        then futMaxTests dl ctx =<< (getFutState dl ctx $ stateName testNames)
+                        else return 100
+  return MkFuns { futArb   = dynArb
+                , futProp  = dynProp
+                , futShow  = dynShow
+                , futMaxSuccessTests = dynMaxSuccessTests
                 }
 
 filterMap :: (a -> Maybe b) -> [a] -> [b]
@@ -80,7 +92,9 @@ anyFunNameMatches line ffns =
        then Just $ ffns {propFound = True}
        else if matchesLine $ showName ffns
             then Just $ ffns {showFound = True}
-            else Nothing
+            else if matchesLine $ stateName ffns
+                 then Just $ ffns {stateFound = True}
+                 else Nothing
   where matchesLine = funNameMatches line
 
 

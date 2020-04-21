@@ -17,6 +17,8 @@ entry passproperty (input : testdata i32) : bool = match input
 entry passshow (input : testdata i32) : []u8 = match input
   case #testdata i -> showdecimali32 i
 
+entry passstate : state = { maxtests = 55 }
+
 -- fucheck failWithShow
 entry failWithShowarbitrary = arbi32
 
@@ -43,6 +45,25 @@ entry tupleMightFailproperty (input : testdata (i32, i32)) =
 entry tupleMightFailshow (input : testdata (i32,i32)) : []u8 =
   match input
   case #testdata (i,j) -> show2tuple (showdecimali32 i) (showdecimali32 j)
+
+-- fucheck bool
+
+entry boolarbitrary (size : size) (seed : i32) : testdata bool =
+  runGen arbitrarybool size (minstd_rand.rng_from_seed [seed])
+
+entry boolproperty (input : testdata bool) =
+  match input
+  case #testdata b -> b
+
+entry boolshow (input : testdata bool) =
+  match input
+  case #testdata b -> showbool b
+
+entry boolstate : state = { maxtests = 55 }
+
+entry maxtests (state : state) : maxtests = state.maxtests
+
+--entry
 
 ---- fucheck zip
 --let ziparbitrary (rng : rng) : ([]i32, []i32) =
