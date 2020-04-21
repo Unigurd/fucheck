@@ -17,7 +17,7 @@ stage2str Show = "show"
 data Result =
     Success
     { resultTestName :: String
-    , numTests       :: Integer
+    , numTests       :: CInt
     }
   | Failure
     -- Nothing if no attempt at showing could be made

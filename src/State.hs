@@ -22,9 +22,9 @@ data State = MkState
   , arbitrary       :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
   , property        :: Ptr FutharkTestData -> ExceptT CInt IO Bool
   , shower          :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
-  , maxSuccessTests :: Integer
-  , numSuccessTests :: Integer
-  , computeSize     :: Integer -> CInt
+  , maxSuccessTests :: CInt
+  , numSuccessTests :: CInt
+  , computeSize     :: CInt -> CInt
   , randomSeed      :: StdGen
   }
 
@@ -51,7 +51,7 @@ mkDefaultState testName gen fs =
   , property        = futProp fs
   , shower          = futShow fs
   , maxSuccessTests = futMaxSuccessTests fs
-  , computeSize     = fromInteger . \n -> futMaxSuccessTests fs - (futMaxSuccessTests fs `div` (n+1))
+  , computeSize     = \n -> futMaxSuccessTests fs - (futMaxSuccessTests fs `div` (n+1))
   , numSuccessTests = 0
   , randomSeed      = gen
   }

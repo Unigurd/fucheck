@@ -102,7 +102,7 @@ futMaxTests dl ctx futState = do
   maxtestsfun <- DL.dlsym dl "futhark_entry_maxtests"
   eitherMaxTests <- runExceptT $ haskify (mkMaxTests maxtestsfun) ctx futState
   case eitherMaxTests of
-    Right maxTests -> return $ toInteger maxTests
+    Right maxTests -> return maxTests
     Left exitCode -> error $ "Failed getting maxtests with exit code " ++ show exitCode
 
 foreign import ccall "dynamic"

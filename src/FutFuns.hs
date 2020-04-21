@@ -23,7 +23,7 @@ data FutFuns = MkFuns
   { futArb   :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
   , futProp  :: Ptr FutharkTestData -> ExceptT CInt IO Bool
   , futShow  :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
-  , futMaxSuccessTests :: Integer
+  , futMaxSuccessTests :: CInt
   }
 
 -- internal type for parsing tests in a futhark file
