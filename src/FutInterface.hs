@@ -9,6 +9,7 @@ module FutInterface ( FutharkTestData
                     , mkShow
                     , getFutState
                     , futMaxTests
+                    , futGetMaxSize
                     , Ptr
                     , CInt(CInt)
                     , CBool(CBool)) where
@@ -104,6 +105,18 @@ futMaxTests dl ctx futState = do
   case eitherMaxTests of
     Right maxTests -> return maxTests
     Left exitCode -> error $ "Failed getting maxtests with exit code " ++ show exitCode
+
+-- make static
+foreign import ccall "dynamic"
+  mkMaxSize :: FunPtr (Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt)
+                    -> Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt
+-- make static
+futGetMaxSize dl ctx futState = do
+  maxsizefun <- DL.dlsym dl "futhark_entry_maxsize"
+  eitherMaxSize <- runExceptT $ haskify (mkMaxSize maxsizefun) ctx futState
+  case eitherMaxSize of
+    Right maxSize -> return maxSize
+    Left exitCode -> error $ "Failed getting maxsizes with exit code " ++ show exitCode
 
 foreign import ccall "dynamic"
   mkFutShape :: FunPtr (Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr CInt))

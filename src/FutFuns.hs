@@ -16,6 +16,7 @@ import FutInterface ( FutharkTestData
                     , mkShow
                     , getFutState
                     , futMaxTests
+                    , futGetMaxSize
                     , CInt
                     )
 
@@ -24,6 +25,7 @@ data FutFuns = MkFuns
   , futProp  :: Ptr FutharkTestData -> ExceptT CInt IO Bool
   , futShow  :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
   , futMaxSuccessTests :: CInt
+  , futMaxSize         :: CInt
   }
 
 -- internal type for parsing tests in a futhark file
@@ -62,13 +64,20 @@ loadFutFuns dl ctx testNames = do
   dynShow <- if showFound testNames
              then Just <$> mkShow dl ctx (showName testNames)
              else return Nothing
-  dynMaxSuccessTests <- if stateFound testNames
-                        then futMaxTests dl ctx =<< (getFutState dl ctx $ stateName testNames)
-                        else return 100
+  (dynMST, dynMS) <-
+    if stateFound testNames
+    then do
+      state <- (getFutState dl ctx $ stateName testNames)
+      mt <- futMaxTests dl ctx state
+      ms <- futGetMaxSize  dl ctx state
+      putStrLn $ "Her" ++ show ms
+      return (mt,ms)
+    else return (100, 100)
   return MkFuns { futArb   = dynArb
                 , futProp  = dynProp
                 , futShow  = dynShow
-                , futMaxSuccessTests = dynMaxSuccessTests
+                , futMaxSuccessTests = dynMST
+                , futMaxSize         = dynMS
                 }
 
 filterMap :: (a -> Maybe b) -> [a] -> [b]

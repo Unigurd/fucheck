@@ -8,6 +8,8 @@ module Types = {
   type result      = #success | #failure i32 -- Is this used?
   type^ gen 'a     = #gen (size -> rng -> testdata a)
   type maxtests    = i32
-  type state       = { maxtests : maxtests }
+  type maxsize     = i32
+  type state       = { maxtests : maxtests
+                     , maxsize  : maxsize }
 
 }

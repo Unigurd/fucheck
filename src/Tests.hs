@@ -10,6 +10,7 @@ f *< a = f <*> pure a
 
 singleCheck :: S.State -> IO R.Result
 singleCheck state = do
+  putStrLn $ show $ S.size state
   let seed = S.getSeed state
   eTestdata <- runExceptT $ (S.arbitrary state) (S.size state) seed
   case eTestdata of

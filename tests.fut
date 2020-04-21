@@ -17,7 +17,7 @@ entry passproperty (input : testdata i32) : bool = match input
 entry passshow (input : testdata i32) : []u8 = match input
   case #testdata i -> showdecimali32 i
 
-entry passstate : state = { maxtests = 55 }
+entry passstate : state = { maxtests = 305 , maxsize = 72}
 
 -- fucheck failWithShow
 entry failWithShowarbitrary = arbi32
@@ -59,9 +59,10 @@ entry boolshow (input : testdata bool) =
   match input
   case #testdata b -> showbool b
 
-entry boolstate : state = { maxtests = 55 }
+entry boolstate : state = { maxtests = 55 , maxsize = 101}
 
 entry maxtests (state : state) : maxtests = state.maxtests
+entry maxsize  (state : state) : maxsize = state.maxsize
 
 --entry
 
