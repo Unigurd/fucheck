@@ -1,6 +1,13 @@
 import "src/futs/fucheck"
 open Fucheck
 
+entry maxtests (state : state) : maxtests =
+  state.maxtests
+entry maxsize  (state : state) : maxsize =
+  state.maxsize
+entry maxdiscardedratio (state : state) : maxdiscardedratio =
+  state.maxdiscardedratio
+
 let arbi32 (size : size) (seed : i32) : testdata (i32) =
   runGen arbitraryi32 size (minstd_rand.rng_from_seed [seed])
 
@@ -17,7 +24,7 @@ entry passproperty (input : testdata i32) : bool = match input
 entry passshow (input : testdata i32) : []u8 = match input
   case #testdata i -> showdecimali32 i
 
-entry passstate : state = { maxtests = 305 , maxsize = 72}
+entry passstate : state = { maxtests = 305 , maxsize = 513, maxdiscardedratio = 100 }
 
 -- fucheck failWithShow
 entry failWithShowarbitrary = arbi32
@@ -59,12 +66,31 @@ entry boolshow (input : testdata bool) =
   match input
   case #testdata b -> showbool b
 
-entry boolstate : state = { maxtests = 55 , maxsize = 101}
+entry boolstate : state = { maxtests = 55 , maxsize = 101, maxdiscardedratio = 100 }
 
-entry maxtests (state : state) : maxtests = state.maxtests
-entry maxsize  (state : state) : maxsize = state.maxsize
 
---entry
+-- fucheck cond
+
+entry condstate = { maxtests = 157 , maxsize = 131, maxdiscardedratio = 1 }
+
+entry condarbitrary = arbtup
+
+entry condcondition (input : testdata (i32, i32)) =
+  match input
+  case #testdata (i,j) -> i <= j
+
+entry condproperty (input : testdata (i32, i32)) =
+  match input
+  case #testdata (i,j) -> i <= j
+
+
+entry condshow (input : testdata (i32,i32)) : []u8 =
+  match input
+  case #testdata (i,j) -> show2tuple (showdecimali32 i) (showdecimali32 j)
+
+
+
+
 
 ---- fucheck zip
 --let ziparbitrary (rng : rng) : ([]i32, []i32) =

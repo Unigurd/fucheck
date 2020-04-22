@@ -9,9 +9,10 @@ import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
 import FutInterface (CInt)
 import State (State)
 
-data Stage = Arb | Prop | Show
+data Stage = Arb | Prop | Cond | Show
 stage2str Arb  = "arbitrary"
 stage2str Prop = "property"
+stage2str Cond = "condition"
 stage2str Show = "show"
 
 data Result =
@@ -20,12 +21,17 @@ data Result =
     , numTests       :: CInt
     }
   | Failure
+    { resultTestName :: String
     -- Nothing if no attempt at showing could be made
     -- Just Left if it tried to generate a string but failed
     -- Just Right if a string was successfully generated
-    { resultTestName :: String
     , shownInput     :: Maybe (Either CInt String)
     , resultSeed     :: CInt
+    }
+  | GaveUp
+    { resultTestName :: String
+    , resultSeed     :: CInt
+    , numTests       :: CInt
     }
   | Exception
     { resultTestName :: String

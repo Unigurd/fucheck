@@ -8,8 +8,7 @@ module FutInterface ( FutharkTestData
                     , mkProperty
                     , mkShow
                     , getFutState
-                    , futMaxTests
-                    , futGetMaxSize
+                    , futGetStateField
                     , Ptr
                     , CInt(CInt)
                     , CBool(CBool)) where
@@ -95,28 +94,16 @@ getFutState dl ctx name = do
 
 -- make static
 foreign import ccall "dynamic"
-  mkMaxTests :: FunPtr (Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt)
-                     -> Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt
+  mkGetStateField :: FunPtr (Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt)
+                          -> Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt
 
 -- make static
-futMaxTests dl ctx futState = do
-  maxtestsfun <- DL.dlsym dl "futhark_entry_maxtests"
-  eitherMaxTests <- runExceptT $ haskify (mkMaxTests maxtestsfun) ctx futState
-  case eitherMaxTests of
-    Right maxTests -> return maxTests
-    Left exitCode -> error $ "Failed getting maxtests with exit code " ++ show exitCode
-
--- make static
-foreign import ccall "dynamic"
-  mkMaxSize :: FunPtr (Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt)
-                    -> Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt
--- make static
-futGetMaxSize dl ctx futState = do
-  maxsizefun <- DL.dlsym dl "futhark_entry_maxsize"
-  eitherMaxSize <- runExceptT $ haskify (mkMaxSize maxsizefun) ctx futState
-  case eitherMaxSize of
-    Right maxSize -> return maxSize
-    Left exitCode -> error $ "Failed getting maxsizes with exit code " ++ show exitCode
+futGetStateField dl ctx futState field = do
+  fieldfun <- DL.dlsym dl ("futhark_entry_" ++ field)
+  eitherfield <- runExceptT $ haskify (mkGetStateField fieldfun) ctx futState
+  case eitherfield of
+    Right field -> return field
+    Left exitCode -> error $ "Failed getting " ++ field ++ " with exit code " ++ show exitCode
 
 foreign import ccall "dynamic"
   mkFutShape :: FunPtr (Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr CInt))
