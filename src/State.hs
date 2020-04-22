@@ -9,6 +9,7 @@ module State ( State(..)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
 import qualified System.Posix.DynamicLinker as DL
+import qualified Data.Map.Strict as M
 
 import qualified ParseFut as PF
 import qualified FutInterface as FI
@@ -20,6 +21,8 @@ data State = MkState
   , property                  :: Ptr FutharkTestData -> ExceptT CInt IO Bool
   , condition                 :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO Bool)
   , shower                    :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
+  , labeler                   :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
+  , labels                    :: Maybe (M.Map String CInt)
   , numSuccessTests           :: CInt
   , maxSuccessTests           :: CInt
   , numDiscardedTests         :: CInt
@@ -57,6 +60,9 @@ mkDefaultState dl ctx testNames = do
   dynShow <- if PF.showFound testNames
              then Just <$> FI.mkShow dl ctx (PF.showName testNames)
              else return Nothing
+  dynLabel <- if PF.labelFound testNames then
+                Just <$> FI.mkShow dl ctx (PF.labelName testNames)
+              else return Nothing
   (dynMST, dynMS, dynMDR) <-
     if PF.stateFound testNames
     then do
@@ -72,6 +78,8 @@ mkDefaultState dl ctx testNames = do
     , property                  = dynProp
     , condition                 = dynCond
     , shower                    = dynShow
+    , labeler                   = dynLabel
+    , labels                    = const M.empty <$> dynLabel
     , numSuccessTests           = 0
     , maxSuccessTests           = dynMST
     , numDiscardedTests         = 0

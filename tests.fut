@@ -71,7 +71,7 @@ entry boolstate : state = { maxtests = 55 , maxsize = 101, maxdiscardedratio = 1
 
 -- fucheck cond
 
-entry condstate = { maxtests = 157 , maxsize = 131, maxdiscardedratio = 1 }
+entry condstate = { maxtests = 157 , maxsize = 131, maxdiscardedratio = 100 }
 
 entry condarbitrary = arbtup
 
@@ -87,6 +87,12 @@ entry condproperty (input : testdata (i32, i32)) =
 entry condshow (input : testdata (i32,i32)) : []u8 =
   match input
   case #testdata (i,j) -> show2tuple (showdecimali32 i) (showdecimali32 j)
+
+
+
+entry condlabels (input : testdata (i32,i32)) : []u8 =
+  match input
+  case #testdata (i,j) -> "Difference of at least " ++ (showdecimali32 ((j - i) / 10 * 10))
 
 
 

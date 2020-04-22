@@ -1,6 +1,9 @@
+{-# language ScopedTypeVariables #-}
 module Tests (singleCheck, fucheck, result2str) where
 
+import Data.List (foldl', sortOn)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
+import qualified Data.Map.Strict as MS
 
 import qualified Result  as R
 import qualified Message as M
@@ -16,8 +19,8 @@ useArb state = do
   eTestdata <- runExceptT $ (S.arbitrary state) (S.size state) seed
   case eTestdata of
     Left arbExitCode -> return $ R.SingleException state (R.Arb arbExitCode)
-    --Left arbExitCode -> return $ R.Exception (S.stateTestName state) Nothing R.Arb arbExitCode seed
     Right testdata -> useCond state testdata
+
 
 useCond state testdata =
   case S.condition state of
@@ -41,7 +44,17 @@ useProp state testdata = do
       return $ R.SingleException state $ R.Prop propExitCode
     Right result -> do
       if result then do
-        return $ R.SingleSuccess state
+        elabel <- sequence $ runExceptT <$> S.labeler state *< testdata
+        case elabel of
+          Nothing -> do
+            return $ R.SingleSuccess state
+          Just (Right label) -> do
+            return $ R.SingleSuccess $ state { S.labels = MS.alter alterFun label <$> S.labels state }
+            where
+              alterFun (Nothing) = Just 1
+              alterFun (Just n)  = Just $ n + 1
+          Just (Left labelExitCode) ->
+            return $ R.SingleException state $ R.Label labelExitCode
         else do
         shownInput <- sequence $ runExceptT <$> S.shower state *< testdata
         return $ R.SingleFailure state shownInput
@@ -53,6 +66,7 @@ fucheck state
       return $ R.Success
       { R.resultTestName = S.stateTestName state
       , R.numTests       = S.numSuccessTests state
+      , R.resultLabels   = S.labels state
       }
 
   | S.numRecentlyDiscardedTests state >= S.maxDiscardedRatio state =
@@ -88,8 +102,19 @@ fucheck state
 
 
 result2str :: R.Result -> String
-result2str (R.Success name numTests) =
+result2str (R.Success name numTests Nothing) =
   "Property " ++ name ++ " holds after " ++ show numTests ++ " tests"
+result2str (R.Success name numTests (Just labelsMap)) =
+  unlines (("Property " ++ name ++ " holds after " ++ show numTests ++ " tests") : labelStrs)
+   where
+     labelsList = sortOn (length . fst) $ MS.toList labelsMap
+     (labels,freqs)    = unzip labelsList
+     (total :: Float )     = fromIntegral $ foldl' (+) 0 $ MS.elems labelsMap
+     percentages =
+       (\elem -> show (round ((elem / total) * 100)))
+       <$> fromIntegral
+       <$> freqs
+     labelStrs = M.formatMessages "% " $ zip percentages labels
 result2str (R.Failure name Nothing seed) =
   "Property " ++ name ++ " failed on seed " ++ show seed
 result2str (R.Failure name (Just (Right str)) _) =

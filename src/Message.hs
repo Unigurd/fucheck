@@ -1,4 +1,4 @@
-module Message (crashMessage) where
+module Message (crashMessage, formatMessages) where
 
 import Data.List (foldl')
 import FutInterface (CInt)
@@ -11,11 +11,11 @@ indent n str =
 -- off by one?
 padEndUntil end str = str ++ take (end - length str) spaces
 
-formatMessages :: [(String, String)] -> [String]
-formatMessages messages = lines
+formatMessages :: String -> [(String, String)] -> [String]
+formatMessages separator messages = lines
   where
     (names, values) = unzip messages
-    namesColon      = (++ ": ") <$> names
+    namesColon      = (++ separator) <$> names
     longestName     = foldl' (\acc elm -> max acc $ length elm) 0 namesColon
     formatName      = padEndUntil longestName
     formattedNames  = map formatName namesColon
@@ -24,7 +24,7 @@ formatMessages messages = lines
 funCrash :: String -> [(String,String)] -> [String]
 funCrash stage messages = crashMessage
   where
-    restLines       = formatMessages messages
+    restLines       = formatMessages ": " messages
     crashMessage    = stage:(indent 2 <$> restLines)
 
 crashMessage :: String -> CInt -> [(String,[(String,String)])] -> [String]
