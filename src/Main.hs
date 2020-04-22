@@ -10,6 +10,8 @@ import qualified System.Posix.DynamicLinker as DL
 import System.Random (getStdGen, StdGen)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 
+import ParseFut (FutFunNames, findTests)
+
 import FutInterface ( newFutConfig
                     , newFutContext
                     , newFutFreeConfig
@@ -18,20 +20,11 @@ import FutInterface ( newFutConfig
                     , Ptr
                     , FutharkTestData
                     )
-import FutFuns (findTests, loadFutFuns, ffTestName)
 import Tests (fucheck, result2str)
 import State (mkDefaultState)
 
-uncurry3 f (a,b,c) = f a b c
-
-
 headWithDefault def []     = def
 headWithDefault _ (head:_) = head
-
-
-
-
-
 
 letThereBeDir dir = do
   dirExists <- doesDirectoryExist dir
@@ -45,12 +38,6 @@ exitOnCompilationError exitCode filename =
     _           -> do
       putStrLn $ "Could not compile " ++ filename
       exitFailure
-
-testIOprep dl ctx test = do
-  gen <- getStdGen
-  futFuns <- loadFutFuns dl ctx test
-  return (ffTestName test, gen,futFuns)
-
 
 main :: IO ()
 main = do
@@ -83,13 +70,10 @@ main = do
 
   dl <- DL.dlopen (tmpFile ++ ".so") [DL.RTLD_NOW] -- Read up on flags
 
-  let firstTest = head testNames
-
   cfg <- newFutConfig dl
   ctx <- newFutContext dl cfg
 
-  ioPrep <- sequence $ map (testIOprep dl ctx) testNames
-  let states = map (uncurry3 mkDefaultState) ioPrep
+  states <- sequence $ map (mkDefaultState dl ctx) testNames
   sequence_ $ map ((putStrLn . result2str) <=< fucheck) states
   freeFutContext dl ctx
   newFutFreeConfig dl cfg

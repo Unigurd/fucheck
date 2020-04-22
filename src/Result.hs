@@ -1,5 +1,6 @@
 module Result ( Stage(..)
               , Result(..)
+              , SingleResult(..)
               , stage2str
               ) where
 
@@ -9,11 +10,16 @@ import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
 import FutInterface (CInt)
 import State (State)
 
-data Stage = Arb | Prop | Cond | Show
-stage2str Arb  = "arbitrary"
-stage2str Prop = "property"
-stage2str Cond = "condition"
-stage2str Show = "show"
+data Stage =
+    Arb  {exitCode :: CInt}
+  | Prop {exitCode :: CInt}
+  | Cond {exitCode :: CInt}
+  | Show {exitCode :: CInt}
+
+stage2str (Arb _)  = "arbitrary"
+stage2str (Prop _) = "property"
+stage2str (Cond _) = "condition"
+stage2str (Show _) = "show"
 
 data Result =
     Success
@@ -37,16 +43,11 @@ data Result =
     { resultTestName :: String
     , shownInput     :: Maybe (Either CInt String)
     , errorStage     :: Stage
-    , futExitCode    :: CInt
     , resultSeed     :: CInt
     }
 
-
-
-
-
-
-
-
-
-
+data SingleResult =
+    SingleSuccess   State
+  | SingleFailure   State (Maybe (Either CInt String))
+  | SingleGaveUp    State
+  | SingleException State Stage

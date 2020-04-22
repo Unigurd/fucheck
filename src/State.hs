@@ -1,25 +1,18 @@
-module State ( State
+module State ( State(..)
              , mkDefaultState
-             , stateTestName
-             , arbitrary
-             , property
-             , condition
-             , shower
-             , maxSuccessTests
-             , numSuccessTests
-             , numDiscardedTests
-             , numRecentlyDiscardedTests
-             , maxDiscardedRatio
              , size
              , getSeed
+             , nextGen
              , nextState
              ) where
 
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
+import qualified System.Posix.DynamicLinker as DL
 
-import FutInterface (FutharkTestData, CInt, Ptr)
-import FutFuns (FutFuns(..))
+import qualified ParseFut as PF
+import qualified FutInterface as FI
+import FutInterface (CInt, Ptr, FutharkTestData, Futhark_Context)
 
 data State = MkState
   { stateTestName             :: String
@@ -52,21 +45,40 @@ nextState state = (cInt, newState)
     cInt         = toEnum int
     newState     = state {randomSeed = newGen}
 
-mkDefaultState :: String -> StdGen -> FutFuns -> State
-mkDefaultState testName gen fs =
-  MkState
-  { stateTestName             = testName
-  , arbitrary                 = futArb fs
-  , property                  = futProp fs
-  , condition                 = futCond fs
-  , shower                    = futShow fs
-  , numSuccessTests           = 0
-  , maxSuccessTests           = futMaxSuccessTests fs
-  , numDiscardedTests         = 0
-  , numRecentlyDiscardedTests = 0
-  , maxDiscardedRatio         = futMaxDiscardedRatio fs
-  , maxSize                   = futMaxSize fs
-  , computeSize               =
-      \n -> round $ toRational (futMaxSize fs) * (toRational n / toRational (futMaxSuccessTests fs - 1))
-  , randomSeed                = gen
-  }
+
+mkDefaultState :: DL.DL -> Ptr Futhark_Context -> PF.FutFunNames -> IO State
+mkDefaultState dl ctx testNames = do
+  gen <- getStdGen
+  dynArb  <- FI.mkArbitrary dl ctx $ PF.arbName testNames
+  dynProp <- FI.mkProperty  dl ctx $ PF.propName testNames
+  dynCond <- if PF.condFound testNames
+             then Just <$> FI.mkProperty dl ctx (PF.condName testNames)
+             else return Nothing
+  dynShow <- if PF.showFound testNames
+             then Just <$> FI.mkShow dl ctx (PF.showName testNames)
+             else return Nothing
+  (dynMST, dynMS, dynMDR) <-
+    if PF.stateFound testNames
+    then do
+      state <- FI.getFutState dl ctx $ PF.stateName testNames
+      mt    <- FI.futGetStateField dl ctx state "maxtests"
+      ms    <- FI.futGetStateField dl ctx state "maxsize"
+      mdr   <- FI.futGetStateField dl ctx state "maxdiscardedratio"
+      return (mt,ms,mdr)
+    else return (100, 100, 100) -- move defaults to fut
+  return $ MkState
+    { stateTestName             = PF.ffTestName testNames
+    , arbitrary                 = dynArb
+    , property                  = dynProp
+    , condition                 = dynCond
+    , shower                    = dynShow
+    , numSuccessTests           = 0
+    , maxSuccessTests           = dynMST
+    , numDiscardedTests         = 0
+    , numRecentlyDiscardedTests = 0
+    , maxDiscardedRatio         = dynMDR
+    , maxSize                   = dynMS
+    , computeSize               =
+        \n -> round $ toRational dynMS * (toRational n / toRational (dynMST - 1))
+    , randomSeed                = gen
+    }

@@ -1,4 +1,5 @@
-module FutInterface ( FutharkTestData
+module FutInterface ( Futhark_Context
+                    , FutharkTestData
                     , FutState
                     , newFutConfig
                     , newFutFreeConfig
