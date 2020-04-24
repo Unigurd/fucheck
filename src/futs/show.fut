@@ -75,15 +75,26 @@ let showbinaryi32  = num2str "0b" showBase36 2
 -- Hvorfor brokker foldl sig over at resultatet ikke har samme stoerrelse som "" ?
 --let separatewith separator stringify strs : []u8 = foldl (\x y -> x ++ separator ++ stringify y) "" strs
 
-let separatewith separator stringify arr : []u8 =
-  loop str = "" for elm in arr do str ++ separator ++ stringify elm
+let separatewith 'elm (separator : []u8) (stringify : elm -> []u8) (arr : []elm) : []u8 =
+  if length arr == 0 then ""
+  else loop str = stringify (head arr)
+       for elm in drop 1 arr
+       do str ++ separator ++ stringify elm
 
-let surroundwith prefix postfix str = prefix ++ str ++ postfix
+let surroundwith (prefix : []u8) (postfix : []u8) (str : []u8) = prefix ++ str ++ postfix
 
-let showCollection prefix separator postfix stringify strs = surroundwith prefix postfix <| separatewith separator stringify strs
+let showCollection 'elm
+                   (prefix : []u8)
+                   (separator : []u8)
+                   (postfix : []u8)
+                   (stringify : elm -> []u8)
+                   (arr : []elm) =
+  surroundwith prefix postfix <| separatewith separator stringify arr
 
-let show2tuple str1 str2           = "(" ++ str1 ++ ", " ++ str2 ++ ")"
+let show2tuple 'elm1 'elm2 (show1 : elm1 -> []u8) (show2 : elm2 -> []u8) ((x,y) : (elm1,elm2)) : []u8 =
+  "(" ++ show1 x ++ ", " ++ show2 y ++ ")"
 let show3tuple str1 str2 str3      = "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ")"
 let show4tuple str1 str2 str3 str4 = "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ", " ++ str4 ++ ")"
 
-let showArray stringify strs = showCollection "[" ", " "]" stringify strs
+let showArray 'elm (stringify : elm -> []u8) (arr : []elm) : []u8 =
+  showCollection "[" ", " "]" stringify arr

@@ -1,6 +1,8 @@
 import "types"
 open Types
 
+let untestdata 'typ (n : testdata typ) : typ = match n case #testdata m -> m
+
 
 let snd (_,b) = b
 
@@ -8,38 +10,41 @@ let split_rng_in_2 rng =
   let rngs = minstd_rand.split_rng 2 rng
   in (rngs[0], rngs[1])
 
-let runGen 'a (gen : gen a) (size : size) (rng : rng) : testdata a =
-  match gen
-  case #gen f -> f size rng
+let genify f = {runGen = f}
+
+--let runGen 'a (gen : gen a) (size : size) (rng : rng) : testdata a =
+--  match gen
+--  case #gen f -> f size rng
 
 let choose (bounds : (i32,i32)) : gen i32 =
-  #gen (\_ r -> #testdata (snd (dist.rand bounds r)))
+  genify (\_ r -> #testdata (snd (dist.rand bounds r)))
 
 let sized 'a (fgen : size -> gen a) : gen a =
-  #gen (\n r ->
-          match (fgen n)
-          case #gen m -> m n r)
+  genify (\n r -> (fgen n).runGen n r)
 
 let resize 'elm (resizer : size -> size) (oldgen : gen elm) : gen elm =
-  #gen (\size rng -> runGen oldgen (resizer size) rng)
+  genify (\size rng -> oldgen.runGen (resizer size) rng)
 
 let constsize 'elm (newsize : size) (oldgen : gen elm) : gen elm =
-  #gen (\_ rng -> runGen oldgen newsize rng)
+  genify (\_ rng -> oldgen.runGen newsize rng)
 
 let scale 'elm (fun : i32 -> i32) (oldgen : gen elm) : gen elm =
-  #gen (\size rng -> runGen oldgen (fun size) rng)
+  genify (\size rng -> oldgen.runGen (fun size) rng)
+
+let constgen 't (const : t) : gen t =
+  genify (\_ _ -> #testdata const)
 
 
 let frequencyof2 'elm
                  ((freq0,gen0) : (i32, gen elm))
                  ((freq1,gen1) : (i32, gen elm))
                  : gen elm =
-  #gen (\size rng ->
+  genify (\size rng ->
   let (rng0,rng1) = split_rng_in_2 rng
   let totalfreq = freq0 + freq1
         in if (snd (dist.rand (1,totalfreq) rng0)) <= freq0
-           then runGen gen0 size rng1
-           else runGen gen1 size rng1)
+           then gen0.runGen size rng1
+           else gen1.runGen size rng1)
 
 let oneof2 'elm
            (gen0 : gen elm)
@@ -102,7 +107,7 @@ let oneof5 'elm
 
 
 let elements 'elm [n] (elms : [n]elm) : gen elm =
-  #gen (\_ rng ->
+  genify (\_ rng ->
   let i = snd (dist.rand (0,n-1) rng)
         in #testdata elms[i])
 
@@ -128,57 +133,50 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
   let (freqs,elms) = unzip choices
   let freqsums     = scan (+) 0 freqs
   let total        = freqsums[n-1]
-  in #gen (\_ rng ->
+  in genify (\_ rng ->
              let goal = (snd (dist.rand (1,total) rng))
              let resultindex = weirdBinarySearch freqsums goal
              in #testdata elms[resultindex])
 
 
-let arbitrarybool : gen bool = #gen (\_ rng -> #testdata ((snd (dist.rand (0,1) rng)) == 1))
+let arbitrarybool : gen bool = genify (\_ rng -> #testdata ((snd (dist.rand (0,1) rng)) == 1))
 let arbitraryi32  : gen i32  = sized (\n -> choose (-n,n))
 
 
---let arbitraryarr 'elm (arbitraryelm : gen elm) : gen ([]elm) =
---  #gen (\size rng ->
---          let (rng0, rng1) = split_rng_in_2 rng
---          let (_,arrSize) = dist.rand (0,size) rng0
---          let rngs = minstd_rand.split_rng  arrSize rng1
---          in #testdata (map (runGen arbitraryelm size) rngs))
+
+let arbitraryarr 'elm (arbitraryelm : gen elm) : gen ([]elm) =
+  genify (\size rng ->
+          let (rng0, rng1) = split_rng_in_2 rng
+          let (_,arrSize) = dist.rand (0,size) rng0
+          let rngs = minstd_rand.split_rng  arrSize rng1
+          in #testdata (map (untestdata <-< arbitraryelm.runGen size) rngs))
+
+let arbitrarysizedarr 'elm (arbitraryelm : {runGen : size -> rng -> #testdata elm}) : gen ([]elm) =
+  genify (\size rng ->
+          let rngs = minstd_rand.split_rng size rng
+          in #testdata (map (untestdata <-< arbitraryelm.runGen size) rngs))
+
+--let arbitrary_arr_of_arr 'elm
+--                         --(arbitrary_inner_arr : gen elm -> gen ([]elm))
+--                         (arbitraryelm : gen elm)
+--                         : gen =
+--  genify (\size rng -> 
 
 let arbitrarytuple 'a 'b (arbitrarya : gen a) (arbitraryb : gen b) : gen (a,b) =
-  #gen (\n r ->
+  genify (\n r ->
           let rngs = minstd_rand.split_rng 2 r
-          let a = runGen arbitrarya n rngs[0]
-          let b = runGen arbitraryb n rngs[1]
+          let a = arbitrarya.runGen n rngs[0]
+          let b = arbitraryb.runGen n rngs[1]
           in match (a,b)
              case (#testdata a, #testdata b) -> #testdata (a,b))
-
-
-let rngArrLen 't (rngElms : (rng -> (rng,t))) (length : i32) (rng : rng) : (rng,[]t) =
-  let rngs        = minstd_rand.split_rng length rng
-  let (rngs,elms) = unzip <| map rngElms rngs
-  let rng         = minstd_rand.join_rng rngs
-  in (rng, elms)
-
-let rngArr 't (rngElms : (rng -> (rng,t))) (maxLen : i32) (rng : rng) : (rng,[]t) =
-  let (rng, length) = dist.rand(0, maxLen) rng
-  in rngArrLen rngElms length rng
-
-let bla 'elm (arbitraryelm : i32 -> minstd_rand.rng -> elm)
-        : i32 -> minstd_rand.rng -> ([]elm) =
-  (\size rng ->
-     let (rng0, rng1) = split_rng_in_2 rng
-     let (_,arrSize) = dist.rand (0,size) rng0
-     let rngs = minstd_rand.split_rng  arrSize rng1
-     in ((map (arbitraryelm size) rngs)))
 
 -- instead of arbitrarysortedarray
 -- so as not to write a sorting function / add a dependency
 -- simply supply an array generator and a sorting function
 let transformgen 'a 'b (f : a -> b) (g : gen a) : gen b =
-  #gen (\size rng ->
+  genify (\size rng ->
           let b =
-            match runGen g size rng
+            match g.runGen size rng
             case #testdata a -> f a
           in #testdata b)
 
