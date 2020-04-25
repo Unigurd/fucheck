@@ -68,7 +68,7 @@ main = do
     TP.readProcess $ TP.proc "gcc" [tmpFile ++ ".c", "-o", tmpFile ++ ".so", "-fPIC", "-shared"]
   exitOnCompilationError gccExitCode $ "generated C file"
 
-  dl <- DL.dlopen (tmpFile ++ ".so") [DL.RTLD_NOW] -- Read up on flags
+  dl <- DL.dlopen (tmpFile ++ ".so") [DL.RTLD_NOW]  -- Read up on flags
 
   cfg <- newFutConfig dl
   ctx <- newFutContext dl cfg

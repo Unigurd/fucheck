@@ -47,6 +47,7 @@ data Result =
     { resultTestName :: String
     , shownInput     :: Maybe (Either CInt String)
     , errorStage     :: Stage
+    , resultSize     :: CInt
     , resultSeed     :: CInt
     }
 

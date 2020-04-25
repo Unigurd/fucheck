@@ -87,6 +87,7 @@ mkDefaultState dl ctx testNames = do
     , maxDiscardedRatio         = dynMDR
     , maxSize                   = dynMS
     , computeSize               =
-        \n -> round $ toRational dynMS * (toRational n / toRational (dynMST - 1))
+        \n -> round $ toRational dynMS
+              * (toRational n / toRational (dynMST - (if dynMST > 1 then 1 else 0)))
     , randomSeed                = gen
     }

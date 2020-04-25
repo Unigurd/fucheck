@@ -27,10 +27,10 @@ funCrash stage messages = crashMessage
     restLines       = formatMessages ": " messages
     crashMessage    = stage:(indent 2 <$> restLines)
 
-crashMessage :: String -> CInt -> [(String,[(String,String)])] -> [String]
-crashMessage name seed messages = crashMessage
+crashMessage :: String -> CInt -> CInt -> [(String,[(String,String)])] -> [String]
+crashMessage name size seed messages = crashMessage
   where
-    crashLine = ("Property " ++ name ++ " crashed on seed " ++ show seed)
+    crashLine = ("Property " ++ name ++ " crashed with size " ++ show size ++ " and seed " ++ show seed)
     lines                = uncurry funCrash =<< messages
     linesWithDescription = "in function(s)":(indent 2 <$> lines)
     crashMessage         = crashLine:(indent 2 <$> linesWithDescription)

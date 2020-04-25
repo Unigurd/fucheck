@@ -98,6 +98,7 @@ fucheck state
                            , R.shownInput     = Nothing
                            , R.errorStage     = stage
                            , R.resultSeed     = S.getSeed state
+                           , R.resultSize     = S.size state
                            }
 
 
@@ -121,16 +122,19 @@ result2str (R.Failure name (Just (Right str)) _) =
   "Property " ++ name ++ " failed on input " ++ str
 result2str (R.Failure name (Just (Left exitCode)) seed) =
   unlines $ ("Property " ++ name ++ " failed on seed " ++ show seed)
-  : M.crashMessage name seed [("show",[("Exit code", show exitCode)])]
+  : M.crashMessage name (-1) seed [("show",[("Exit code", show exitCode)])] -- size -1 skal aendres
 result2str (R.GaveUp name seed numTests) =
   "Property " ++ name ++ " gave up getting the input precondition to hold after " ++ show numTests ++ " tests."
-result2str (R.Exception name Nothing stage seed) =
-  unlines $ M.crashMessage name seed [((R.stage2str stage),[("Exit code", show $ R.exitCode stage)])]
-result2str (R.Exception name (Just (Right input)) stage seed) =
-  unlines $ M.crashMessage name seed [((R.stage2str stage), [ ("Input", input)
-                                                            , ("Exit code", show $ R.exitCode stage)
-                                                            ])]
-result2str (R.Exception name (Just (Left showExitCode)) stage seed) =
-  unlines $ M.crashMessage name seed [ ((R.stage2str stage),[("Exit code", show $ R.exitCode stage)])
-                                     , ("show", [("Exit code", show showExitCode)])
-                                     ]
+result2str (R.Exception name Nothing stage size seed) =
+  unlines $ M.crashMessage name size seed
+  [((R.stage2str stage),[("Exit code", show $ R.exitCode stage)])]
+result2str (R.Exception name (Just (Right input)) stage size seed) =
+  unlines $ M.crashMessage name size seed
+  [((R.stage2str stage), [ ("Input", input)
+                         , ("Exit code", show $ R.exitCode stage)
+                         ])]
+result2str (R.Exception name (Just (Left showExitCode)) stage size seed) =
+  unlines $ M.crashMessage name size seed
+  [ ((R.stage2str stage),[("Exit code", show $ R.exitCode stage)])
+  , ("show", [("Exit code", show showExitCode)])
+  ]
