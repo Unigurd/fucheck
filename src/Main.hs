@@ -9,8 +9,9 @@ import System.Exit (ExitCode(ExitSuccess), exitSuccess, exitFailure)
 import qualified System.Posix.DynamicLinker as DL
 import System.Random (getStdGen, StdGen)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
+import GHC.Err (errorWithoutStackTrace)
 
-import ParseFut (FutFunNames, findTests)
+import ParseFut (FutFunNames, findTests, only, without)
 
 import FutInterface ( newFutConfig
                     , newFutContext
@@ -39,9 +40,26 @@ exitOnCompilationError exitCode filename =
       putStrLn $ "Could not compile " ++ filename
       exitFailure
 
+data WhichTests = All | Only [String] | Without [String]
+filterTests All tests             = tests
+filterTests (Only these) tests    = only these tests
+filterTests (Without these) tests = without these tests
+
+data Args = Args { file :: String
+                 , whichTests :: WhichTests
+                 }
+parseArgs :: [String] -> Args
+parseArgs [] = errorWithoutStackTrace "Missing file argument"
+parseArgs [file] = Args file All
+parseArgs [file, "--only"] = errorWithoutStackTrace "Missing test arguments to --only"
+parseArgs (file : "--only" : tests) = Args file $ Only tests
+parseArgs [file, "--without"] = errorWithoutStackTrace "Missing test arguments to --without"
+parseArgs (file : "--without" : tests) = Args file $ Without tests
+
+
 main :: IO ()
 main = do
-  args <- getArgs
+  args <- parseArgs <$> getArgs
   --case compare (length args) 1 of
   --  LT -> do
   --    putStrLn "Give test file as argument"
@@ -51,12 +69,12 @@ main = do
   --    exitSuccess
   --  EQ -> return ()
 
-  let filename = headWithDefault "tests" args
+  let filename = file args
   let tmpDir = "/tmp/fucheck/"
   let tmpFile = tmpDir ++ "fucheck-tmp-file"
 
   fileText <- readFile $ filename ++ ".fut"
-  let testNames = findTests fileText
+  let testNames = filterTests (whichTests args) (findTests fileText)
 
   letThereBeDir tmpDir
 
