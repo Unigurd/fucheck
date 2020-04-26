@@ -5,9 +5,9 @@ module Types = {
   type result            = #success | #failure i32 -- Is this used?
 
   type size              = i32
-  type rng               = minstd_rand.rng
+  type rng               = (minstd_rand.rng, minstd_rand.rng)
   type testdata 't       = #testdata t
-  type^ gen 'a           = size -> rng -> testdata a
+  type^ gen 'a           = size ->rng -> testdata a
   type maxtests          = i32
   type maxsize           = i32
   type maxdiscardedratio = i32
