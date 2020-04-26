@@ -11,18 +11,19 @@ entry maxsize  (state : state) : maxsize =
 entry maxdiscardedratio (state : state) : maxdiscardedratio =
   state.maxdiscardedratio
 
-let arbi32 (size : size) (seed : i32) : testdata (i32) =
-  arbitraryi32 size <| rngs seed
+let arbi32 (maxsize : size) (seed : i32) : testdata (i32) =
+  uncurry (arbitraryi32 maxsize) <| start maxsize seed
 
 let arbtup (size : size) (seed : i32) : testdata (i32, i32) =
   let (sizerng, rng) = split_rng_in_2 <| rng seed
-  in (arbitrarytuple arbitraryi32 arbitraryi32) size (sizerng, rng)
+  in uncurry (arbitrarytuple arbitraryi32 arbitraryi32 size) <| start size seed
 
 let genshit 't (gen : gen t) (size : size) (seed : i32) : testdata t =
+  let (sizerng, rng) = split_rng_in_2 <| rng seed
+  in uncurry (gen size) <| start size seed
+
 --let genshit 't (gen : size -> rng -> []t) (size : size) (seed : i32) : testdata ([size]t) =
 --let genshit gen size seed =
-  let (sizerng, rng) = split_rng_in_2 <| rng seed
-  in gen size (sizerng, rng)
 
 --let genshitarr 't   (size : size) (gen : gen ([size]t)) (seed : i32) : testdata ([size]t) =
 --  gen size (minstd_rand.rng_from_seed [seed])
@@ -67,7 +68,7 @@ entry tupleMightFailshow (input : testdata (i32,i32)) : []u8 =
 
 -- fucheck bool
 entry boolarbitrary (size : size) (seed : i32) : testdata bool =
-  arbitrarybool size <| rngs seed
+  uncurry (arbitrarybool size) <| start size seed
 
 entry boolproperty (input : testdata bool) =
   match input
@@ -102,7 +103,7 @@ entry condlabels (input : testdata (i32,i32)) : []u8 =
 
 -- fucheck zip
 entry ziparbitrary (size : size) (seed : i32) : testdata ([](i32,i32)) =
-  (arbitraryarr (arbitrarytuple arbitraryi32 arbitraryi32)) size <| rngs seed
+  uncurry (arbitraryarr (arbitrarytuple arbitraryi32 arbitraryi32) size) <| start size seed
 --  (arbitraryarr (arbitrarytuple arbitraryi32 arbitraryi32)) size rng
 
 entry zipproperty [n] (input : testdata ([n](i32,i32))) : bool =
@@ -115,7 +116,7 @@ entry zipshow (input : testdata ([](i32,i32))) : []u8 =
 
 -- fucheck badzip
 entry badziparbitrary (size : size) (seed : i32) : testdata ([](i32,i32)) =
-  (arbitraryarr (arbitrarytuple arbitraryi32 arbitraryi32)) size <| rngs seed
+  uncurry (arbitraryarr (arbitrarytuple arbitraryi32 arbitraryi32) size) <| start size seed
 
 entry badzipproperty [n] (input : testdata ([n](i32,i32))) : bool =
   match input
@@ -128,7 +129,7 @@ entry badzipshow (input : testdata ([](i32,i32))) : []u8 =
 
 -- fucheck failsize
 entry failsizearbitrary (size : size) (seed : i32) : testdata ([]i32) =
-  (arbitraryarr arbitraryi32) size <| rngs seed
+  uncurry (arbitraryarr arbitraryi32 size) <| start size seed
 
 entry failsizeproperty [n] (input : testdata ([n]i32)) : bool =
   match input
@@ -150,7 +151,7 @@ let maybeshow 't (elmshow : t -> []u8) (input : (maybe t)) : []u8 =
 
 -- fucheck justfail
 entry justfailarbitrary (size : size) (seed : i32) : testdata (maybe i32) =
-  (maybegen arbitraryi32) size <| rngs seed
+  uncurry (maybegen arbitraryi32 size) <| start size seed
 
 entry justfailproperty (input : testdata (maybe i32)) : bool =
   match input
@@ -162,7 +163,7 @@ entry justfailshow (input : testdata (maybe i32)) : []u8 =
 
 -- fucheck nothingfail
 entry nothingfailarbitrary (size : size) (seed : i32) : testdata (maybe i32) =
-  (maybegen arbitraryi32) size <| rngs seed
+  uncurry (maybegen arbitraryi32 size) <| start size seed
 
 entry nothingfailproperty (input : testdata (maybe i32)) : bool =
   !(justfailproperty input)
@@ -172,7 +173,7 @@ entry nothingfailshow (input : testdata (maybe i32)) : []u8 =
 
 -- fucheck maybearr
 entry maybearrarbitrary (size : size) (seed : i32) : testdata ([](maybe i32)) =
-  (arbitraryarr (maybegen arbitraryi32)) size <| rngs seed
+  uncurry (arbitraryarr (maybegen arbitraryi32) size) <| start size seed
 
 entry maybearrproperty [n] (input : testdata ([n](maybe i32))) : bool =
   match input
@@ -183,7 +184,7 @@ entry maybearrshow [n] (input : testdata ([n](maybe i32))) : []u8 =
 
 -- fucheck resizei32
 entry resizei32arbitrary =
-  genshit (resize (+10) arbitraryi32)
+  genshit (scale (+10) arbitraryi32)
 
 entry resizei32property (input : testdata i32) : bool = false
 
@@ -194,7 +195,7 @@ entry resizei32show (input : testdata i32) : []u8 =
 entry sizedarrstate = {defaultstate, maxtests = 1}
 
 entry sizedarrarbitrary (size : size) (seed : i32) : testdata (*[size]i32)=
-  arbitrarysizedarr arbitraryi32 size <| rngs seed
+  uncurry (arbitrarysizedarr arbitraryi32 size) <| start size seed
 
 entry sizedarrproperty (input : testdata ([]i32)) : bool =
   match input
@@ -206,7 +207,7 @@ entry sizedarrshow =
 
 -- fucheck map
 entry maparbitrary (size : size) (seed : i32) : testdata ([]i32) =
-  arbitraryarr arbitraryi32 size <| rngs seed
+  uncurry (arbitraryarr arbitraryi32 size) <| start size seed
 
 entry mapproperty [n] (input : testdata ([n]i32)) : bool =
   match input
@@ -217,14 +218,16 @@ entry mapshow [n] (input : testdata ([n]i32)) : []u8 =
 
 
 -- fucheck arr2d
-
 entry arr2darbitrary (size : size) (seed : i32) : testdata ([][]i32)=
-  arbitraryarr (arbitraryarr arbitraryi32) size <| rngs seed
+  uncurry (arbitraryarr (arbitraryarr arbitraryi32) size) <| start size seed
 
 
 entry arr2dproperty (input : testdata ([][]i32)) : bool =
   match input
-  case #testdata arr -> arr == transpose <| transpose arr
+  case #testdata arr -> arr == (transpose <| transpose arr)
+
+let entryarr2dshow (input : testdata ([][]i32)) : []u8 =
+  showArray (showArray showdecimali32) <| untestdata input
 
 ---- fucheck resizearr
 --entry resizearrarbitrary [n] size seed : gen ([n]i32) =

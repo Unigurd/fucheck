@@ -11,45 +11,45 @@ let split_rng_in_2 rng =
   let rngs = minstd_rand.split_rng 2 rng
   in (rngs[0], rngs[1])
 
-let rng seed = minstd_rand.rng_from_seed [seed]
-let rngs = split_rng_in_2 <-< rng
-
-
+let newownsize maxsize sizerng = snd <| dist.rand (0,maxsize) sizerng
+let rng seed   = minstd_rand.rng_from_seed [seed]
+let rngs       = split_rng_in_2 <-< rng
+let start maxsize seed =
+  let (sizerng,rng) = rngs seed
+  in (newownsize maxsize sizerng, (sizerng,rng))
 --let genify f = {runGen = f}
 
 --let runGen 'a (gen : gen a) (size : size) (rng : rng) : testdata a =
 --  match gen
 --  case #gen f -> f size rng
 
+
 let choose (bounds : (i32,i32)) : gen i32 =
-   (\_ (_, r) -> #testdata (snd (dist.rand bounds r)))
+   (\_ _ (_, r) -> #testdata (snd (dist.rand bounds r)))
 
 let sized 'a (fgen : size -> gen a) : gen a =
-   (\size rngs -> (fgen size) size rngs)
+   (\maxsize ownsize rngs -> (fgen maxsize) maxsize ownsize rngs)
 
-let resize 'elm (resizer : size -> size) (oldgen : gen elm) : gen elm =
-   (\size rngs -> oldgen (resizer size) rngs)
 
-let constsize 'elm (newsize : size) (oldgen : gen elm) : gen elm =
-   (\_ rngs -> oldgen newsize rngs)
+--let constsize 'elm (newsize : size) (oldgen : gen elm) : gen elm =
+--   (\_ _ rngs -> oldgen newsize ownsize rngs)
 
 let scale 'elm (fun : i32 -> i32) (oldgen : gen elm) : gen elm =
-   (\size rngs -> oldgen (fun size) rngs)
+   (\maxsize ownsize rngs -> oldgen (fun maxsize) (fun ownsize) rngs)
 
 let constgen 't (const : t) : gen t =
-   (\_ _ -> #testdata const)
-
+   (\_ _ _ -> #testdata const)
 
 let frequencyof2 'elm
                  ((freq0,gen0) : (i32, gen elm))
                  ((freq1,gen1) : (i32, gen elm))
                  : gen elm =
-   (\size (sizerng, rng) ->
+  (\maxsize ownsize (sizerng, rng) ->
   let (rng0,rng1) = split_rng_in_2 rng
   let totalfreq = freq0 + freq1
-        in if (snd (dist.rand (1,totalfreq) rng0)) <= freq0
-           then gen0 size (sizerng, rng1)
-           else gen1 size (sizerng, rng1))
+   in if (snd (dist.rand (1,totalfreq) rng0)) <= freq0
+      then gen0 maxsize ownsize (sizerng, rng1)
+      else gen1 maxsize ownsize (sizerng, rng1))
 
 let oneof2 'elm
            (gen0 : gen elm)
@@ -112,9 +112,9 @@ let oneof5 'elm
 
 
 let elements 'elm [n] (elms : [n]elm) : gen elm =
-   (\_ (_, rng) ->
+  (\_ _ (_, rng) ->
   let i = snd (dist.rand (0,n-1) rng)
-        in #testdata elms[i])
+    in #testdata elms[i])
 
 -- NOT TESTED
 -- Finds the rightmost index at which the element is <= the goal
@@ -138,25 +138,25 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
   let (freqs,elms) = unzip choices
   let freqsums     = scan (+) 0 freqs
   let total        = freqsums[n-1]
-  in  (\_ (_, rng) ->
+  in  (\_ _ (_, rng) ->
              let goal = (snd (dist.rand (1,total) rng))
              let resultindex = weirdBinarySearch freqsums goal
              in #testdata elms[resultindex])
 
 
-let arbitrarybool : gen bool = (\_ (_, rng) -> #testdata ((snd (dist.rand (0,1) rng)) == 1))
+let arbitrarybool : gen bool = (\_ _ (_, rng) -> #testdata ((snd (dist.rand (0,1) rng)) == 1))
 let arbitraryi32  : gen i32  = sized (\n -> choose (-n,n))
-
-
 
 let arbitraryarr 'elm
                  (arbitraryelm : gen elm)
-                 : gen ([]elm) =
-   (\size (sizerng, rng) ->
-          let (_,arrSize) = dist.rand (0,size) sizerng
-          let rngs = minstd_rand.split_rng arrSize rng
-          let bothrngs = map (\rng -> (sizerng, rng)) rngs
-          in #testdata (map (untestdata <-< arbitraryelm size) bothrngs))
+                 (maxsize : size)
+                 (ownsize : size)
+                 ((sizerng, rng) : rng)
+                 : testdata ([ownsize]elm) =
+  --let (_,arrSize) = dist.rand (0,size) sizerng
+  let rngs = minstd_rand.split_rng ownsize rng
+  let bothrngs = map (\rng -> (sizerng, rng)) rngs
+  in #testdata (map (untestdata <-< arbitraryelm maxsize ownsize) bothrngs)
 
 --let arbitraryarr2 'elm
 --                 (arbitraryelm : gen elm)
@@ -171,12 +171,13 @@ let arbitraryarr 'elm
 -- Why? Is this function useful at all? Should it be removed?
 let arbitrarysizedarr 'elm
                       (arbitraryelm : gen elm)
-                      (size : size)
+                      (maxsize : size)
+                      (ownsize : size)
                       ((sizerng, rng) : rng)
-                      : testdata ([size]elm) =
-  let rngs = minstd_rand.split_rng size rng
+                      : testdata ([maxsize]elm) =
+  let rngs = minstd_rand.split_rng maxsize rng
   let bothrngs = map (\rng -> (sizerng, rng)) rngs
-  in #testdata (map (untestdata <-< arbitraryelm size) bothrngs)
+  in #testdata (map (untestdata <-< arbitraryelm maxsize ownsize) bothrngs)
 
 --let arbitrary_arr_of_arr 'elm
 --                         --(arbitrary_inner_arr : gen elm -> gen ([]elm))
@@ -185,10 +186,10 @@ let arbitrarysizedarr 'elm
 --   (\size rng -> 
 
 let arbitrarytuple 'a 'b (arbitrarya : gen a) (arbitraryb : gen b) : gen (a,b) =
-   (\size (sizerng, rng) ->
+   (\maxsize ownsize (sizerng, rng) ->
           let (rng0,rng1) = split_rng_in_2 rng
-          let a = arbitrarya size (sizerng, rng0)
-          let b = arbitraryb size (sizerng, rng1)
+          let a = arbitrarya maxsize ownsize (sizerng, rng0)
+          let b = arbitraryb maxsize ownsize (sizerng, rng1)
           in match (a,b)
              case (#testdata a, #testdata b) -> #testdata (a,b))
 
@@ -196,9 +197,9 @@ let arbitrarytuple 'a 'b (arbitrarya : gen a) (arbitraryb : gen b) : gen (a,b) =
 -- so as not to write a sorting function / add a dependency
 -- simply supply an array generator and a sorting function
 let transformgen 'a 'b (f : a -> b) (g : gen a) : gen b =
-   (\size rngs ->
+   (\maxsize ownsize rngs ->
           let b =
-            match g size rngs
+            match g maxsize ownsize rngs
             case #testdata a -> f a
           in #testdata b)
 

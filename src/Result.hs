@@ -36,6 +36,7 @@ data Result =
     -- Just Left if it tried to generate a string but failed
     -- Just Right if a string was successfully generated
     , shownInput     :: Maybe (Either CInt String)
+    , resultSize     :: CInt
     , resultSeed     :: CInt
     }
   | GaveUp

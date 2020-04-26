@@ -7,7 +7,7 @@ import System.Environment(getArgs)
 import qualified System.Process.Typed as TP
 import System.Exit (ExitCode(ExitSuccess), exitSuccess, exitFailure)
 import qualified System.Posix.DynamicLinker as DL
-import System.Random (getStdGen, StdGen)
+--import System.Random (newStdGen, StdGen)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 
 import ParseFut (FutFunNames, findTests)

@@ -91,6 +91,7 @@ fucheck state
     R.SingleFailure state shownInput ->
       return $ R.Failure { R.resultTestName = S.stateTestName state
                        , R.shownInput     = shownInput
+                       , R.resultSize     = S.size state
                        , R.resultSeed     = S.getSeed state
                        }
     R.SingleException state stage ->
@@ -116,13 +117,13 @@ result2str (R.Success name numTests (Just labelsMap)) =
        <$> fromIntegral
        <$> freqs
      labelStrs = M.formatMessages "% " $ zip percentages labels
-result2str (R.Failure name Nothing seed) =
-  "Property " ++ name ++ " failed on seed " ++ show seed
-result2str (R.Failure name (Just (Right str)) _) =
+result2str (R.Failure name Nothing size seed) =
+  "Property " ++ name ++ " failed with size " ++ show size ++ " and seed " ++ show seed
+result2str (R.Failure name (Just (Right str)) _ _) =
   "Property " ++ name ++ " failed on input " ++ str
-result2str (R.Failure name (Just (Left exitCode)) seed) =
+result2str (R.Failure name (Just (Left exitCode)) size seed) =
   unlines $ ("Property " ++ name ++ " failed on seed " ++ show seed)
-  : M.crashMessage name (-1) seed [("show",[("Exit code", show exitCode)])] -- size -1 skal aendres
+  : M.crashMessage name size seed [("show",[("Exit code", show exitCode)])] -- size -1 skal aendres
 result2str (R.GaveUp name seed numTests) =
   "Property " ++ name ++ " gave up getting the input precondition to hold after " ++ show numTests ++ " tests."
 result2str (R.Exception name Nothing stage size seed) =

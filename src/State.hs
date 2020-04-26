@@ -7,7 +7,7 @@ module State ( State(..)
              ) where
 
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
-import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
+import System.Random (randomIO, StdGen, newStdGen, next, RandomGen)
 import qualified System.Posix.DynamicLinker as DL
 import qualified Data.Map.Strict as M
 
@@ -51,7 +51,7 @@ nextState state = (cInt, newState)
 
 mkDefaultState :: DL.DL -> Ptr Futhark_Context -> PF.FutFunNames -> IO State
 mkDefaultState dl ctx testNames = do
-  gen <- getStdGen
+  gen <- newStdGen
   dynArb  <- FI.mkArbitrary dl ctx $ PF.arbName testNames
   dynProp <- FI.mkProperty  dl ctx $ PF.propName testNames
   dynCond <- if PF.condFound testNames
