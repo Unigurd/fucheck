@@ -1,15 +1,6 @@
 import "src/futs/fucheck"
 open Fucheck
 
-let defaultstate : state = {maxtests = 100, maxsize = 100, maxdiscardedratio = 10}
-
-entry maxtests (state : state) : maxtests =
-  state.maxtests
-entry maxsize  (state : state) : maxsize =
-  state.maxsize
-entry maxdiscardedratio (state : state) : maxdiscardedratio =
-  state.maxdiscardedratio
-
 let arbi32 (size : size) (seed : i32) : testdata (i32) =
   arbitraryi32 size (minstd_rand.rng_from_seed [seed])
 
@@ -57,7 +48,6 @@ entry tupleMightFailshow (input : testdata (i32,i32)) : []u8 =
   case #testdata t -> show2tuple showdecimali32 showdecimali32 t
 
 -- fucheck bool
-
 entry boolarbitrary (size : size) (seed : i32) : testdata bool =
   arbitrarybool size (minstd_rand.rng_from_seed [seed])
 

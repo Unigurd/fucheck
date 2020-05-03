@@ -14,4 +14,12 @@ module Types = {
                            , maxsize  : maxsize
                            , maxdiscardedratio : maxdiscardedratio }
 
+let defaultstate : state = {maxtests = 100, maxsize = 100, maxdiscardedratio = 10}
+entry maxtests (state : state) : maxtests =
+  state.maxtests
+entry maxsize  (state : state) : maxsize =
+  state.maxsize
+entry maxdiscardedratio (state : state) : maxdiscardedratio =
+  state.maxdiscardedratio
+
 }
