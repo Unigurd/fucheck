@@ -72,18 +72,88 @@ let showhexi32     = num2str "0x" showBase36 16
 let showoctali32   = num2str "0o" showBase36 8
 let showbinaryi32  = num2str "0b" showBase36 2
 
--- Hvorfor brokker foldl sig over at resultatet ikke har samme stoerrelse som "" ?
---let separatewith separator stringify strs : []u8 = foldl (\x y -> x ++ separator ++ stringify y) "" strs
+let separatewith 'elm (separator : []u8) (stringify : elm -> []u8) (arr : []elm) : []u8 =
+  if length arr == 0 then ""
+  else loop str = stringify (head arr)
+       for elm in drop 1 arr
+       do str ++ separator ++ stringify elm
 
-let separatewith separator stringify arr : []u8 =
-  loop str = "" for elm in arr do str ++ separator ++ stringify elm
+--let separatewith separator stringify arr : []u8 =
+--  loop str = "" for elm in arr do str ++ separator ++ stringify elm
+
+let separatewith2 'elm (sep0 : []u8) (sep1 : []u8) (interval : i32) stringify (arr : []elm) : []u8 =
+  loop str = ""
+  for i < length arr
+  do str ++ if i % interval == 0 then sep1 else sep0 ++ stringify (arr[i])
 
 let surroundwith prefix postfix str = prefix ++ str ++ postfix
 
-let showCollection prefix separator postfix stringify strs = surroundwith prefix postfix <| separatewith separator stringify strs
+let showCollection prefix separator postfix stringify strs =
+  surroundwith prefix postfix <| separatewith separator stringify strs
 
-let show2tuple str1 str2           = "(" ++ str1 ++ ", " ++ str2 ++ ")"
-let show3tuple str1 str2 str3      = "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ")"
-let show4tuple str1 str2 str3 str4 = "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ", " ++ str4 ++ ")"
+let showtuple str1 str2 =
+  "(" ++ str1 ++ ", " ++ str2 ++ ")"
+let show2tuple  = showtuple
+let show3tuple str1 str2 str3 =
+  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ")"
+let show4tuple str1 str2 str3 str4 =
+  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ", " ++ str4 ++ ")"
+let show5tuple str1 str2 str3 str4 str5 =
+  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ", " ++ str4 ++ ", " ++ str5 ++ ")"
 
-let showArray stringify strs = showCollection "[" ", " "]" stringify strs
+let showArray stringify arr : []u8 =
+  showCollection "[" ", " "]" stringify arr
+
+--let showArray2d stringify strs : []u8 = separatewith2 "," "], ["
+
+let showArray2d stringify arr : []u8 =
+  let inner = showArray stringify
+  let outer = showArray inner
+  in outer arr
+
+let showArray3d stringify arr : []u8 =
+  let inner  = showArray stringify
+  let middle = showArray inner
+  let outer  = showArray middle
+  in outer arr
+
+let showArray4d stringify arr : []u8 =
+  let a = showArray stringify
+  let b = showArray a
+  let c = showArray b
+  let d = showArray c
+  in  d arr
+
+let showArray5d stringify arr : []u8 =
+  let a = showArray stringify
+  let b = showArray a
+  let c = showArray b
+  let d = showArray c
+  let e = showArray d
+  in  e arr
+
+let squarebracket n = "[" ++ showdecimali32 n ++ "]"
+let show_sizes_1d 'elm [n]
+            (arr : [n]elm)
+            : []u8 =
+  squarebracket n
+
+let show_sizes_2d 'elm [n] [m]
+            (arr : [n][m]elm)
+            : []u8 =
+  squarebracket n ++ squarebracket m
+
+let show_sizes_3d 'elm [a] [b] [c]
+            (arr : [a][b][c]elm)
+            : []u8 =
+  squarebracket a ++ squarebracket b ++ squarebracket c
+
+let show_sizes_4d 'elm [a] [b] [c] [d]
+            (arr : [a][b][c][d]elm)
+            : []u8 =
+  squarebracket a ++ squarebracket b ++ squarebracket c ++ squarebracket d
+
+let show_sizes_5d 'elm [a] [b] [c] [d] [e]
+            (arr : [a][b][c][d][e]elm)
+            : []u8 =
+  squarebracket a ++ squarebracket b ++ squarebracket c ++ squarebracket d ++ squarebracket e

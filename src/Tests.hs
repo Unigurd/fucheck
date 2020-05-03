@@ -111,7 +111,7 @@ result2str (R.Success name numTests (Just labelsMap)) =
      (labels,freqs)    = unzip labelsList
      (total :: Float )     = fromIntegral $ foldl' (+) 0 $ MS.elems labelsMap
      percentages =
-       (\elem -> show (round ((elem / total) * 100)))
+       (\elem -> show (round ((elem / total) * 100))) -- div by zero?
        <$> fromIntegral
        <$> freqs
      labelStrs = M.formatMessages "% " $ zip percentages labels

@@ -1,12 +1,23 @@
 import "types"
 open Types
 
+let untestdata 'elm (td : testdata elm) : elm =
+  match td
+  case #testdata elm -> elm
 
 let snd (_,b) = b
+
+let rng_from_seed seed = minstd_rand.rng_from_seed [seed]
 
 let split_rng_in_2 rng =
   let rngs = minstd_rand.split_rng 2 rng
   in (rngs[0], rngs[1])
+
+let getsizes (maxsize : size) (rng : rng) (num : i32) : ([num]i32, rng) =
+  let two_rngs = minstd_rand.split_rng 2 rng
+  let rngs     = minstd_rand.split_rng num two_rngs[0]
+  let sizes    = map (\rng -> (snd (dist.rand (0,maxsize) rng))) rngs
+  in (sizes, two_rngs[1])
 
 let runGen 'a (gen : gen a) (size : size) (rng : rng) : testdata a =
   match gen
@@ -153,24 +164,60 @@ let arbitrarytuple 'a 'b (arbitrarya : gen a) (arbitraryb : gen b) : gen (a,b) =
           in match (a,b)
              case (#testdata a, #testdata b) -> #testdata (a,b))
 
+let arbitraryarr 'elm
+                 (arbitraryelm : gen elm)
+                 (size : size)
+                 : gen ([size]elm) =
+  #gen (\maxsize rng ->
+          let rngs = minstd_rand.split_rng size rng
+          in #testdata (map (untestdata <-< runGen arbitraryelm maxsize) rngs))
 
-let rngArrLen 't (rngElms : (rng -> (rng,t))) (length : i32) (rng : rng) : (rng,[]t) =
-  let rngs        = minstd_rand.split_rng length rng
-  let (rngs,elms) = unzip <| map rngElms rngs
-  let rng         = minstd_rand.join_rng rngs
-  in (rng, elms)
+let arbitrary2darr 'elm
+                 (arbitraryelm : gen elm)
+                 (size0 : size)
+                 (size1 : size)
+                 : gen ([size0][size1]elm) =
+  #gen (\maxsize rng ->
+          let arr1d = arbitraryarr arbitraryelm size1
+          let arr2d = arbitraryarr arr1d size0
+          in runGen arr2d maxsize rng)
 
-let rngArr 't (rngElms : (rng -> (rng,t))) (maxLen : i32) (rng : rng) : (rng,[]t) =
-  let (rng, length) = dist.rand(0, maxLen) rng
-  in rngArrLen rngElms length rng
+let arbitrary3darr 'elm
+                 (arbitraryelm : gen elm)
+                 (size0 : size)
+                 (size1 : size)
+                 (size2 : size)
+                 : gen ([size0][size1][size2]elm) =
+  #gen (\maxsize rng ->
+          let arr2d = arbitrary2darr arbitraryelm size1 size2
+          let arr3d = arbitraryarr arr2d size0
+          in runGen arr3d maxsize rng)
 
-let bla 'elm (arbitraryelm : i32 -> minstd_rand.rng -> elm)
-        : i32 -> minstd_rand.rng -> ([]elm) =
-  (\size rng ->
-     let (rng0, rng1) = split_rng_in_2 rng
-     let (_,arrSize) = dist.rand (0,size) rng0
-     let rngs = minstd_rand.split_rng  arrSize rng1
-     in ((map (arbitraryelm size) rngs)))
+let arbitrary4darr 'elm
+                 (arbitraryelm : gen elm)
+                 (size0 : size)
+                 (size1 : size)
+                 (size2 : size)
+                 (size3 : size)
+                 : gen ([size0][size1][size2][size3]elm) =
+  #gen (\maxsize rng ->
+          let arr2d = arbitrary2darr arbitraryelm size2 size3
+          let arr4d = arbitrary2darr arr2d size0 size1
+          in runGen arr4d maxsize rng)
+
+let arbitrary5darr 'elm
+                 (arbitraryelm : gen elm)
+                 (size0 : size)
+                 (size1 : size)
+                 (size2 : size)
+                 (size3 : size)
+                 (size4 : size)
+                 : gen ([size0][size1][size2][size3][size4]elm) =
+  #gen (\maxsize rng ->
+          let arr3d = arbitrary3darr arbitraryelm size2 size3 size4
+          let arr4d = arbitrary2darr arr3d size0 size1
+          in runGen arr4d maxsize rng)
+
 
 -- instead of arbitrarysortedarray
 -- so as not to write a sorting function / add a dependency
