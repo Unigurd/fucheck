@@ -91,15 +91,37 @@ let surroundwith prefix postfix str = prefix ++ str ++ postfix
 let showCollection prefix separator postfix stringify strs =
   surroundwith prefix postfix <| separatewith separator stringify strs
 
-let showtuple str1 str2 =
-  "(" ++ str1 ++ ", " ++ str2 ++ ")"
-let show2tuple  = showtuple
-let show3tuple str1 str2 str3 =
-  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ")"
-let show4tuple str1 str2 str3 str4 =
-  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ", " ++ str4 ++ ")"
-let show5tuple str1 str2 str3 str4 str5 =
-  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ", " ++ str4 ++ ", " ++ str5 ++ ")"
+let showtuple 'elm1 'elm2 (show1 : elm1 -> []u8) (show2 : elm2 -> []u8) ((x,y) : (elm1,elm2)) : []u8 =
+  "(" ++ show1 x ++ ", " ++ show2 y ++ ")"
+
+let show2tuple = showtuple
+
+let show3tuple 'elm1 'elm2 'elm3
+               (show1 : elm1 -> []u8)
+               (show2 : elm2 -> []u8)
+               (show3 : elm3 -> []u8)
+               ((x,y,z) : (elm1,elm2,elm3))
+               : []u8 =
+  "(" ++ show1 x ++ ", " ++ show2 y ++ show3 z ++ ")"
+
+let show4tuple 'elm1 'elm2 'elm3 'elm4
+               (show1 : elm1 -> []u8)
+               (show2 : elm2 -> []u8)
+               (show3 : elm3 -> []u8)
+               (show4 : elm4 -> []u8)
+               ((x,y,z,a) : (elm1,elm2,elm3,elm4))
+               : []u8 =
+  "(" ++ show1 x ++ ", " ++ show2 y ++ show3 z ++ show4 a ++ ")"
+
+--let showtuple str1 str2 =
+--  "(" ++ str1 ++ ", " ++ str2 ++ ")"
+--let show2tuple  = showtuple
+--let show3tuple str1 str2 str3 =
+--  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ")"
+--let show4tuple str1 str2 str3 str4 =
+--  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ", " ++ str4 ++ ")"
+--let show5tuple str1 str2 str3 str4 str5 =
+--  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ", " ++ str4 ++ ", " ++ str5 ++ ")"
 
 let showArray stringify arr : []u8 =
   showCollection "[" ", " "]" stringify arr

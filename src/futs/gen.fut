@@ -40,6 +40,8 @@ let constsize 'elm (newsize : size) (oldgen : gen elm) : gen elm =
 let scale 'elm (fun : i32 -> i32) (oldgen : gen elm) : gen elm =
   #gen (\size rng -> runGen oldgen (fun size) rng)
 
+let constgen 't (const : t) : gen t =
+   #gen (\_ _ -> #testdata const)
 
 let frequencyof2 'elm
                  ((freq0,gen0) : (i32, gen elm))
