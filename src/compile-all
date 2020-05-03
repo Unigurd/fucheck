@@ -1,4 +1,0 @@
-futhark opencl --library fucheck.fut
-gcc fucheck.c -o libfucheck.so -fPIC -shared
-ghc fucheck.hs  -lOpenCL  -L. -lfucheck -optl-Wl,-rpath,'.'
-
