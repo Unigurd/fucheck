@@ -105,7 +105,7 @@ entry zipproperty [n] (input : testdata ([n]i32,[n]i32)) : bool =
 entry transposearbitrary (size : size) (seed : i32) : testdata ([][]i32) =
   let rng = rng_from_seed seed
   let (sizes,newrng) = getsizes (size+10) rng 2
-  let my_arb = resize (10+) (arbitrary2darr arbitraryi32 sizes[0] sizes[1])
+  let my_arb = scale (10+) (arbitrary2darr arbitraryi32 sizes[0] sizes[1])
   in my_arb size newrng
 
 
@@ -122,7 +122,7 @@ entry transposeshow [n] [m] (input : testdata ([n][m]i32)) : []u8 =
 --entry d3arbitrary (size : size) (seed : i32) : testdata ([][][]i32) =
 --  let rng = rng_from_seed seed
 --  let (sizes,newrng) = getsizes (size+10) rng 3
---  let my_arb = resize (+10) (arbitrary3darr arbitraryi32 sizes[0] sizes[1] sizes[2])
+--  let my_arb = scale (+10) (arbitrary3darr arbitraryi32 sizes[0] sizes[1] sizes[2])
 --  in my_arb size newrng
 --
 --entry d3property  (input : testdata ([][][]i32)) : bool =
@@ -137,7 +137,7 @@ entry transposeshow [n] [m] (input : testdata ([n][m]i32)) : []u8 =
 --entry d4arbitrary (size : size) (seed : i32) : testdata ([][][][]i32) =
 --  let rng = rng_from_seed seed
 --  let (sizes,newrng) = getsizes (size+10) rng 4
---  let my_arb = resize (+10) (arbitrary4darr arbitraryi32 sizes[0] sizes[1] sizes[2] sizes[3])
+--  let my_arb = scale (+10) (arbitrary4darr arbitraryi32 sizes[0] sizes[1] sizes[2] sizes[3])
 --  in my_arb size newrng
 --
 --entry d4property  (input : testdata ([][][][]i32)) : bool =
@@ -247,13 +247,3 @@ entry maybearrproperty [n] (input : testdata ([n](maybe i32))) : bool =
 
 entry maybearrshow [n] (input : testdata ([n](maybe i32))) : []u8 =
   showArray (maybeshow showdecimali32) (untestdata input)
-
--- fucheck resizei32
-entry resizei32arbitrary (size : size) (seed : i32) =
-  let rng = rng_from_seed seed
-  in (scale (+10) arbitraryi32) size rng
-
-entry resizei32property (input : testdata i32) : bool = false
-
-entry resizei32show (input : testdata i32) : []u8 =
-  showdecimali32 (untestdata input)

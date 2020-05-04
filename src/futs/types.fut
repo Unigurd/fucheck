@@ -9,6 +9,7 @@ module Types = {
   type^ gen 'a           = size -> rng -> testdata a
   type maxtests          = i32
   type maxsize           = i32
+  type maxsize           = size
   type maxdiscardedratio = i32
   type state             = { maxtests : maxtests
                            , maxsize  : maxsize

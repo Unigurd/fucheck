@@ -27,14 +27,10 @@ let sized 'a (fgen : size -> gen a) : gen a =
      match (fgen n)
      case  m -> m n r)
 
--- remove, same as scale
-let resize 'elm (resizer : size -> size) (oldgen : gen elm) : gen elm =
-  (\size rng -> oldgen (resizer size) rng)
-
-let constsize 'elm (newsize : size) (oldgen : gen elm) : gen elm =
+let resize 'elm (newsize : size) (oldgen : gen elm) : gen elm =
   (\_ rng -> oldgen newsize rng)
 
-let scale 'elm (fun : i32 -> i32) (oldgen : gen elm) : gen elm =
+let scale 'elm (fun : u64 -> u64) (oldgen : gen elm) : gen elm =
   (\size rng -> oldgen (fun size) rng)
 
 let constgen 't (const : t) : gen t =
