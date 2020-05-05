@@ -1,17 +1,24 @@
 import "src/futs/fucheck"
 open Fucheck
 
+entry maxtests (state : state) : maxtests =
+  state.maxtests
+entry maxsize  (state : state) : maxsize =
+  state.maxsize
+entry maxdiscardedratio (state : state) : maxdiscardedratio =
+  state.maxdiscardedratio
+
 let arbi32 (size : size) (seed : i32) : testdata (i32) =
-  arbitraryi32 size (minstd_rand.rng_from_seed [seed])
+  arbitraryi32 size <| rng_from_seed seed
 
 let arbtup (size : size) (seed : i32) : testdata (i32, i32) =
-  (arbitrarytuple arbitraryi32 arbitraryi32) size (minstd_rand.rng_from_seed [seed])
+  (arbitrarytuple arbitraryi32 arbitraryi32) size <| rng_from_seed seed
 
 
 -- fucheck pass
 entry passarbitrary = arbi32
 
-  --(arbitrarytuple arbitraryi32 arbitraryi32) size (minstd_rand.rng_from_seed [seed])
+  --(arbitrarytuple arbitraryi32 arbitraryi32) size <| rng_from_seed seed
 entry passproperty (input : testdata i32) : bool = match input
   case #testdata i -> i == i
 
@@ -49,7 +56,7 @@ entry tupleMightFailshow (input : testdata (i32,i32)) : []u8 =
 
 -- fucheck bool
 entry boolarbitrary (size : size) (seed : i32) : testdata bool =
-  arbitrarybool size (minstd_rand.rng_from_seed [seed])
+  arbitrarybool size <| rng_from_seed seed
 
 entry boolproperty (input : testdata bool) =
   match input
@@ -90,11 +97,11 @@ entry condlabels (input : testdata (i32,i32)) : []u8 =
 
 -- fucheck zip
 entry ziparbitrary (maxsize : size) (seed : i32) : testdata ([]i32, []i32) =
-  let rng = rng_from_seed seed
-  let (sizes,newrng) = getsizes maxsize rng 1
+  let rngs = split_rng 2 <| rng_from_seed seed
+  let sizes = getsizes maxsize rngs[0] 1
   let mysize = sizes[0]
   let my_arb = (arbitraryarr arbitraryi32 mysize)
-  in (arbitrarytuple my_arb my_arb) maxsize newrng
+  in (arbitrarytuple my_arb my_arb) maxsize rngs[1]
 
 entry zipproperty [n] (input : testdata ([n]i32,[n]i32)) : bool =
   match input
@@ -103,10 +110,10 @@ entry zipproperty [n] (input : testdata ([n]i32,[n]i32)) : bool =
 
 -- fucheck transpose
 entry transposearbitrary (size : size) (seed : i32) : testdata ([][]i32) =
-  let rng = rng_from_seed seed
-  let (sizes,newrng) = getsizes (size+10) rng 2
+  let rngs = split_rng 2 <| rng_from_seed seed
+  let sizes = getsizes (size+10) rngs[0] 2
   let my_arb = scale (10+) (arbitrary2darr arbitraryi32 sizes[0] sizes[1])
-  in my_arb size newrng
+  in my_arb size rngs[1]
 
 
 entry transposeproperty [n] [m] (input : testdata ([n][m]i32)) : bool =
@@ -169,10 +176,10 @@ entry transposeshow [n] [m] (input : testdata ([n][m]i32)) : []u8 =
 
 -- fucheck badzip
 entry badziparbitrary (size : size) (seed : i32) : testdata ([](i32,i32)) =
-  let rng = rng_from_seed seed
-  let (sizes,newrng) = getsizes size rng 1
+  let rngs = split_rng 2 <| rng_from_seed seed
+  let sizes = getsizes size rngs[0] 1
   let my_arb = (arbitraryarr (arbitrarytuple arbitraryi32 arbitraryi32) sizes[0])
-  in my_arb size newrng
+  in my_arb size rngs[1]
 
 entry badzipproperty [n] (input : testdata ([n](i32,i32))) : bool =
   match input
@@ -185,10 +192,10 @@ entry badzipshow (input : testdata ([](i32,i32))) : []u8 =
 
 -- fucheck failsize
 entry failsizearbitrary (size : size) (seed : i32) : testdata ([]i32) =
-  let rng = rng_from_seed seed
-  let (sizes,newrng) = getsizes size rng 1
+  let rngs = split_rng 2 <| rng_from_seed seed
+  let sizes = getsizes size rngs[0] 1
   let my_arb = (arbitraryarr arbitraryi32 sizes[0])
-  in my_arb size newrng
+  in my_arb size rngs[1]
 
 --uncurry (arbitraryarr arbitraryi32 size) <| start size seed
 
@@ -236,10 +243,10 @@ entry nothingfailshow (input : testdata (maybe i32)) : []u8 =
 
 -- fucheck maybearr
 entry maybearrarbitrary (size : size) (seed : i32) : testdata ([](maybe i32)) =
-  let rng = rng_from_seed seed
-  let (sizes,newrng) = getsizes size rng 1
+  let rngs = split_rng 2 <| rng_from_seed seed
+  let sizes = getsizes size rngs[0] 1
   let my_arb = (arbitraryarr (maybegen arbitraryi32) sizes[0])
-  in my_arb size newrng
+  in my_arb size rngs[1]
 
 entry maybearrproperty [n] (input : testdata ([n](maybe i32))) : bool =
   match input
