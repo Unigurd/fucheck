@@ -5,7 +5,14 @@ module Gen = {
 
   type^ gen 'a           = size -> rng -> testdata a
 
+
+  let testdata 'n (n : n) : testdata n = #testdata n
   let untestdata 'elm (td : testdata elm) : elm =
+    match td
+    case #testdata elm -> elm
+
+
+  let get 'elm (td : testdata elm) : elm =
     match td
     case #testdata elm -> elm
 
@@ -210,6 +217,68 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
   let arbitraryu64  : gen u64  =
     sized (\n -> choose_u64 (0, u64.i32 n))
 
+  let arbitrary_f32_infty : gen f32 =
+    elements [f32.from_bits 0x7f800000, f32.from_bits 0xff800000]
+
+  let arbitrary_f32_nan : gen f32 =
+    \_ rng ->
+      let rngs = split_rng 2 rng
+      in #testdata (f32.from_bits ((rand_u32 (0,1) rngs[0] << 31)
+                                   & 0x7f800000
+                                   & rand_u32 (1, 0x007fffff) rngs[1]))
+
+  let arbitrary_f32_subnormal : gen f32 =
+    \_ rng ->
+      let rngs = split_rng 2 rng
+      in #testdata (f32.from_bits <| ( rand_u32 (0,1) rngs[0] << 31 )
+                                          & rand_u32 (0, 0x007fffff) rngs[1] )
+
+  let arbitrary_f32_normal : gen f32 =
+    \size rng ->
+      let rngs = split_rng 2 rng
+      in #testdata (f32.from_bits <| (rand_u32 (0,u32.min 0xff (u32.i32 size)) rngs[0] << 23)
+                                     & rand_u32 (0, 0x007fffff) rngs[1])
+
+  let arbitrary_f32 : gen f32 =
+  let precision = 9999999999999
+  in (\n rng->
+        let rngs = split_rng 2 rng
+        let n' = i64.i32 n
+        let b = rand_i64 (1,precision) rngs[0]
+        let a = rand_i64 ((-n') * b, n' * b) rngs[1]
+        in #testdata (f32.i64 a % f32.i64 b))
+
+  let arbitrary_f64_infty : gen f64 =
+    elements [f64.from_bits 0x7ff0000000000000, f64.from_bits 0xfff0000000000000]
+
+  let arbitrary_f64_nan : gen f64 =
+    \_ rng ->
+      let rngs = split_rng 2 rng
+      in #testdata (f64.from_bits ((rand_u64 (0,1) rngs[0] << 63)
+                                   & 0x7ff0000000000000
+                                   & rand_u64 (1, 0xfffffffffffff) rngs[1]))
+
+  let arbitrary_f64_subnormal : gen f64 =
+    \_ rng ->
+      let rngs = split_rng 2 rng
+      in #testdata (f64.from_bits <| ( rand_u64 (0,1) rngs[0] << 63)
+                                     & rand_u64 (0, 0xfffffffffffff) rngs[1])
+
+  let arbitrary_f64_normal : gen f64 =
+    \size rng ->
+      let rngs = split_rng 2 rng
+      in #testdata (f64.from_bits <| (rand_u64 (0,u64.min 0x7ff (u64.i32 size)) rngs[0] << 52)
+                                     & rand_u64 (0, 0xfffffffffffff) rngs[1])
+
+  let arbitrary_f64 : gen f64 =
+  let precision = 9999999999999
+  in (\n rng->
+        let rngs = split_rng 2 rng
+        let n' = i64.i32 n
+        let b = rand_i64 (1,precision) rngs[0]
+        let a = rand_i64 ((-n') * b, n' * b) rngs[1]
+        in #testdata (f64.i64 a % f64.i64 b))
+
   let arbitrarytuple 'a 'b (arbitrarya : gen a) (arbitraryb : gen b) : gen (a,b) =
     (\n r ->
        let rngs = minstd_rand.split_rng 2 r
@@ -217,6 +286,63 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
        let b = arbitraryb n rngs[1]
        in match (a,b)
           case (#testdata a, #testdata b) -> #testdata (a,b))
+
+  let arbitrary2tuple = arbitrarytuple
+
+  let arbitrary3tuple 'a 'b 'c
+                      (arbitrarya : gen a)
+                      (arbitraryb : gen b)
+                      (arbitraryc : gen c)
+                      : gen (a,b,c) =
+    (\n r ->
+       let rngs = minstd_rand.split_rng 3 r
+       let a = arbitrarya n rngs[0]
+       let b = arbitraryb n rngs[1]
+       let c = arbitraryc n rngs[2]
+       in match (a,b,c)
+          case (#testdata a, #testdata b, #testdata c) -> #testdata (a,b,c))
+
+  let arbitrary4tuple 'a 'b 'c 'd
+                      (arbitrarya : gen a)
+                      (arbitraryb : gen b)
+                      (arbitraryc : gen c)
+                      (arbitraryd : gen d)
+                      : gen (a,b,c,d) =
+    (\n r ->
+       let rngs = minstd_rand.split_rng 4 r
+       let a = arbitrarya n rngs[0]
+       let b = arbitraryb n rngs[1]
+       let c = arbitraryc n rngs[2]
+       let d = arbitraryd n rngs[3]
+       in match (a,b,c,d)
+          case (#testdata a, #testdata b,
+                #testdata c, #testdata d)
+          -> #testdata (a,b,c,d))
+
+  let arbitrary5tuple 'a 'b 'c 'd 'e
+                      (arbitrarya : gen a)
+                      (arbitraryb : gen b)
+                      (arbitraryc : gen c)
+                      (arbitraryd : gen d)
+                      (arbitrarye : gen e)
+                      : gen (a,b,c,d,e) =
+    (\n r ->
+       let rngs = minstd_rand.split_rng 5 r
+       let a = arbitrarya n rngs[0]
+       let b = arbitraryb n rngs[1]
+       let c = arbitraryc n rngs[2]
+       let d = arbitraryd n rngs[3]
+       let e = arbitrarye n rngs[4]
+       in match (a,b,c,d,e)
+          case (#testdata a, #testdata b,
+                #testdata c, #testdata d,
+                #testdata e)
+          -> #testdata (a,b,c,d,e))
+
+  let two   arb = arbitrary2tuple arb arb
+  let three arb = arbitrary3tuple arb arb arb
+  let four  arb = arbitrary4tuple arb arb arb arb
+  let five  arb = arbitrary5tuple arb arb arb arb arb
 
   let arbitraryarr 'elm
                  (arbitraryelm : gen elm)
