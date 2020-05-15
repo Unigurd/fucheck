@@ -10,6 +10,7 @@ import qualified System.Posix.DynamicLinker as DL
 import System.Random (getStdGen, StdGen)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 import GHC.Err (errorWithoutStackTrace)
+import System.Console.GetOpt (getOpt, ArgOrder(..), OptDescr(..), ArgDescr)
 
 import ParseFut (FutFunNames, findTests, only, without)
 
@@ -45,33 +46,57 @@ filterTests All tests             = tests
 filterTests (Only these) tests    = only these tests
 filterTests (Without these) tests = without these tests
 
-data Args = Args { file :: String
-                 , whichTests :: WhichTests
-                 }
-parseArgs :: [String] -> Args
-parseArgs [] = errorWithoutStackTrace "Missing file argument"
-parseArgs [file] = Args file All
-parseArgs [file, "--only"] = errorWithoutStackTrace "Missing test arguments to --only"
-parseArgs (file : "--only" : tests) = Args file $ Only tests
-parseArgs [file, "--without"] = errorWithoutStackTrace "Missing test arguments to --without"
-parseArgs (file : "--without" : tests) = Args file $ Without tests
+data Compiler = C | OpenCL deriving Show
+futArgs args =
+  case compiler args of
+    C      -> ["c",      "--library", "-o", tmpFile, (file args) ++ ".fut"]
+    OpenCL -> ["opencl", "--library", "-o", tmpFile, (file args) ++ ".fut"]
 
+gccArgs args =
+  case compiler args of
+    C      -> [tmpFile ++ ".c",             "-o", tmpFile ++ ".so", "-fPIC", "-shared"]
+    OpenCL -> [tmpFile ++ ".c", "-lOpenCL", "-o", tmpFile ++ ".so", "-fPIC", "-shared"]
+
+
+data Args = Args { file       :: String
+                 , whichTests :: WhichTests
+                 , compiler   :: Compiler
+                 }
+
+tmpDir  = "/tmp/fucheck/"
+tmpFile = tmpDir ++ "fucheck-tmp-file"
+
+getCompiler ("opencl":rest) = (OpenCL, rest)
+getCompiler ("c":rest)      = (C, rest)
+getCompiler rest            = (C, rest)
+
+getFilename [] = errorWithoutStackTrace "Missing file argument"
+getFilename (filename: rest) = (filename, rest)
+
+getFilter ["--without"] = errorWithoutStackTrace "Missing test arguments to --without"
+getFilter ["--only"]    = errorWithoutStackTrace "Missing test arguments to --only"
+getFilter ("--without":tests) = Without tests
+getFilter ("--only":tests)    = Only tests
+getFilter []                  = All
+getFilter garbage       = errorWithoutStackTrace ("Did not understand: " ++ unwords garbage)
+
+
+parseArgs :: [String] -> Args
+parseArgs strArgs = args
+  where
+    (compiler, rest0) = getCompiler strArgs
+    (filename, rest1) = getFilename rest0
+    testFilter        = getFilter rest1
+    args              = Args { file = filename
+                             , whichTests = testFilter
+                             , compiler = compiler
+                             }
 
 main :: IO ()
 main = do
   args <- parseArgs <$> getArgs
-  --case compare (length args) 1 of
-  --  LT -> do
-  --    putStrLn "Give test file as argument"
-  --    exitSuccess
-  --  GT -> do
-  --    putStrLn "Only accepts one argument; the test file"
-  --    exitSuccess
-  --  EQ -> return ()
 
   let filename = file args
-  let tmpDir = "/tmp/fucheck/"
-  let tmpFile = tmpDir ++ "fucheck-tmp-file"
 
   fileText <- readFile $ filename ++ ".fut"
   let testNames = filterTests (whichTests args) (findTests fileText)
@@ -79,11 +104,11 @@ main = do
   letThereBeDir tmpDir
 
   (futExitCode, futOut, futErr) <-
-    TP.readProcess $ TP.proc "futhark" ["c", "--library", "-o", tmpFile, filename ++ ".fut"]
+    TP.readProcess $ TP.proc "futhark" $ futArgs args
   exitOnCompilationError futExitCode $ filename ++ ".fut"
 
   (gccExitCode, gccOut, gccErr) <-
-    TP.readProcess $ TP.proc "gcc" [tmpFile ++ ".c", "-o", tmpFile ++ ".so", "-fPIC", "-shared"]
+    TP.readProcess $ TP.proc "gcc" $ gccArgs args
   exitOnCompilationError gccExitCode $ "generated C file"
 
   dl <- DL.dlopen (tmpFile ++ ".so") [DL.RTLD_NOW] -- Read up on flags
