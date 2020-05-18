@@ -1,12 +1,5 @@
-import "src/futs/fucheck"
+import "/home/sigurd/studie/bachelor/fucheck/src/futs/fucheck"
 open Fucheck
-
-entry maxtests (state : state) : maxtests =
-  state.maxtests
-entry maxsize  (state : state) : maxsize =
-  state.maxsize
-entry maxdiscardedratio (state : state) : maxdiscardedratio =
-  state.maxdiscardedratio
 
 let arbi32 (size : size) (seed : i32) : testdata (i32) =
   arbitraryi32 size <| rng_from_seed seed

@@ -12,7 +12,7 @@ import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 import GHC.Err (errorWithoutStackTrace)
 import System.Console.GetOpt (getOpt, ArgOrder(..), OptDescr(..), ArgDescr)
 
-import ParseFut (FutFunNames, findTests, only, without)
+import ParseFut (FutFunNames, findTests, only, without, fixEntries, addStateGetters, stripComments)
 
 import FutInterface ( newFutConfig
                     , newFutContext
@@ -49,8 +49,8 @@ filterTests (Without these) tests = without these tests
 data Compiler = C | OpenCL deriving Show
 futArgs args =
   case compiler args of
-    C      -> ["c",      "--library", "-o", tmpFile, (file args) ++ ".fut"]
-    OpenCL -> ["opencl", "--library", "-o", tmpFile, (file args) ++ ".fut"]
+    C      -> ["c",      "--library", "-o", tmpFile, tmpFile ++ ".fut"]
+    OpenCL -> ["opencl", "--library", "-o", tmpFile, tmpFile ++ ".fut"]
 
 gccArgs args =
   case compiler args of
@@ -78,8 +78,7 @@ getFilter ["--only"]    = errorWithoutStackTrace "Missing test arguments to --on
 getFilter ("--without":tests) = Without tests
 getFilter ("--only":tests)    = Only tests
 getFilter []                  = All
-getFilter garbage       = errorWithoutStackTrace ("Did not understand: " ++ unwords garbage)
-
+getFilter garbage = errorWithoutStackTrace ("Did not understand: " ++ unwords garbage)
 
 parseArgs :: [String] -> Args
 parseArgs strArgs = args
@@ -103,9 +102,13 @@ main = do
 
   letThereBeDir tmpDir
 
+  let poodiwahwah = addStateGetters $ fixEntries testNames $ fileText
+  writeFile (tmpFile ++ ".fut") poodiwahwah
+
+
   (futExitCode, futOut, futErr) <-
     TP.readProcess $ TP.proc "futhark" $ futArgs args
-  exitOnCompilationError futExitCode $ filename ++ ".fut"
+  exitOnCompilationError futExitCode $ tmpFile ++ ".fut"
 
   (gccExitCode, gccOut, gccErr) <-
     TP.readProcess $ TP.proc "gcc" $ gccArgs args
