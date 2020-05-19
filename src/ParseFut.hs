@@ -54,10 +54,12 @@ getTestName _                       = Nothing
 mapPerhaps :: (a -> Maybe a) -> [a] -> [a]
 mapPerhaps f l = foldr (\elm acc -> case f elm of ; Nothing -> elm:acc ; Just newElm -> newElm:acc) [] l
 
-funNameMatches ("entry":actualName:_) get set ffns =
-  if actualName == get ffns
-  then Just $ set ffns
-  else Nothing
+funNameMatches (binding:actualName:_) get set ffns
+  | binding == "let" || binding == "entry" =
+    if actualName == get ffns
+    then Just $ set ffns
+    else Nothing
+  | otherwise = Nothing
 funNameMatches _ _ _ _ = Nothing
 
 anyFunNameMatches :: [String] -> FutFunNames -> Maybe FutFunNames
@@ -141,11 +143,11 @@ lada2str (Break es) = '\n':lada2str es
 lada2str (Cons e es) = e ++ " " ++ lada2str es
 
 fixEntries :: [FutFunNames] -> String -> String
-fixEntries tests programtext = lada2str $ fixer $ str2lada (trace (show $ ffTestName <$> tests) programtext)
+fixEntries tests programtext = lada2str $ fixer $ str2lada  programtext
   where
     fixer (Cons e es) =
       if e == "let" || e == "entry"
-      then case (tests `contains`) <$> (trace (show $ next es) (next es)) of
+      then case (tests `contains`) <$> next es of
              Just True  -> Cons "entry" (fixer es)
              Just False -> Cons "let" (fixer es)
              Nothing    -> es
