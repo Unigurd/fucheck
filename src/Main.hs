@@ -1,13 +1,13 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-import System.Directory (createDirectory, doesDirectoryExist)
+import System.Directory (createDirectory, doesDirectoryExist, doesFileExist, removeFile)
 import Control.Monad ((<=<))
 import System.Environment(getArgs)
 import qualified System.Process.Typed as TP
 import System.Exit (ExitCode(ExitSuccess), exitSuccess, exitFailure)
 import qualified System.Posix.DynamicLinker as DL
-import System.Random (getStdGen, StdGen)
+import System.Random (getStdGen, setStdGen, StdGen, randomIO)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 import GHC.Err (errorWithoutStackTrace)
 import System.Console.GetOpt (getOpt, ArgOrder(..), OptDescr(..), ArgDescr)
@@ -47,10 +47,10 @@ filterTests (Only these) tests    = only these tests
 filterTests (Without these) tests = without these tests
 
 data Compiler = C | OpenCL deriving Show
-futArgs args =
+futArgs args futFile =
   case compiler args of
-    C      -> ["c",      "--library", "-o", tmpFile, tmpFile ++ ".fut"]
-    OpenCL -> ["opencl", "--library", "-o", tmpFile, tmpFile ++ ".fut"]
+    C      -> ["c",      "--library", "-o", tmpFile, futFile]
+    OpenCL -> ["opencl", "--library", "-o", tmpFile, futFile]
 
 gccArgs args =
   case compiler args of
@@ -62,6 +62,20 @@ data Args = Args { file       :: String
                  , whichTests :: WhichTests
                  , compiler   :: Compiler
                  }
+
+uniqueFile :: String -> String -> IO String
+uniqueFile basename filetype = do
+  -- what if fucheck is used from other dir?
+  let name = basename ++ "." ++ filetype
+  fileExists <- doesFileExist $ name
+  if fileExists
+  then do
+    int <- randomIO :: IO Integer
+    let newname = basename ++ show int
+    uniqueFile newname filetype
+  else return name
+
+
 
 tmpDir  = "/tmp/fucheck/"
 tmpFile = tmpDir ++ "fucheck-tmp-file"
@@ -102,13 +116,15 @@ main = do
 
   letThereBeDir tmpDir
 
-  let poodiwahwah = addStateGetters $ fixEntries testNames $ fileText
-  writeFile (tmpFile ++ ".fut") poodiwahwah
+  let alteredprogram = addStateGetters $ fixEntries testNames $ fileText
+  tmpFutFile <- uniqueFile filename "fut"
+  writeFile tmpFutFile alteredprogram
 
 
   (futExitCode, futOut, futErr) <-
-    TP.readProcess $ TP.proc "futhark" $ futArgs args
-  exitOnCompilationError futExitCode $ tmpFile ++ ".fut"
+    TP.readProcess $ TP.proc "futhark" $ futArgs args tmpFutFile
+  removeFile tmpFutFile
+  exitOnCompilationError futExitCode $ tmpFutFile
 
   (gccExitCode, gccOut, gccErr) <-
     TP.readProcess $ TP.proc "gcc" $ gccArgs args

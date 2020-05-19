@@ -158,27 +158,27 @@ let showArray5d stringify arr : []u8 =
 
 let squarebracket n = "[" ++ showdecimali32 n ++ "]"
 let show_sizes_1d 'elm [n]
-            (arr : [n]elm)
+            (_ : [n]elm)
             : []u8 =
   squarebracket n
 
 let show_sizes_2d 'elm [n] [m]
-            (arr : [n][m]elm)
+            (_ : [n][m]elm)
             : []u8 =
   squarebracket n ++ squarebracket m
 
 let show_sizes_3d 'elm [a] [b] [c]
-            (arr : [a][b][c]elm)
+            (_ : [a][b][c]elm)
             : []u8 =
   squarebracket a ++ squarebracket b ++ squarebracket c
 
 let show_sizes_4d 'elm [a] [b] [c] [d]
-            (arr : [a][b][c][d]elm)
+            (_ : [a][b][c][d]elm)
             : []u8 =
   squarebracket a ++ squarebracket b ++ squarebracket c ++ squarebracket d
 
 let show_sizes_5d 'elm [a] [b] [c] [d] [e]
-            (arr : [a][b][c][d][e]elm)
+            (_ : [a][b][c][d][e]elm)
             : []u8 =
   squarebracket a ++ squarebracket b ++ squarebracket c ++ squarebracket d ++ squarebracket e
 }
