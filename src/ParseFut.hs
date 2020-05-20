@@ -97,12 +97,20 @@ usableTest test = arbFound test && propFound test
 filtersplit p list = foldr (\elm (ts,fs) -> if p elm then (elm:ts,fs) else (ts,elm:fs)) ([],[]) list
 
 
-arbName   ffnames = ffTestName ffnames ++ "arbitrary"
-propName  ffnames = ffTestName ffnames ++ "property"
-condName  ffnames = ffTestName ffnames ++ "condition"
-showName  ffnames = ffTestName ffnames ++ "show"
-stateName ffnames = ffTestName ffnames ++ "state"
-labelName ffnames = ffTestName ffnames ++ "labels"
+arbName   ffnames = "gen_"    ++ ffTestName ffnames
+propName  ffnames = "prop_"   ++ ffTestName ffnames
+condName  ffnames = "cond_"   ++ ffTestName ffnames
+showName  ffnames = "show_"   ++ ffTestName ffnames
+stateName ffnames = "state_"  ++ ffTestName ffnames
+labelName ffnames = "labels_" ++ ffTestName ffnames
+
+isFucheckFun name test =
+  name == arbName test
+  || name == propName test
+  || name == condName test
+  || name == showName test
+  || name == stateName test
+  || name == labelName test
 
 stripComment [] = []
 stripComment (word:rest) =
@@ -147,12 +155,9 @@ fixEntries tests programtext = lada2str $ fixer $ str2lada  programtext
     fixer (Break acc) = Break $ fixer acc
     fixer Nil = Nil
 
-    tests `contains` name = any (name `beginsWith`) $ ffTestName <$> tests
-    (a:as) `beginsWith` (b:bs) = if a == b
-                                 then as `beginsWith` bs
-                                 else False
-    [] `beginsWith` (b:bs) = False
-    _ `beginsWith` _ = True
+    tests `contains` testname = any (isFucheckFun testname) tests
+
+
     next Nil          = Nothing
     next (Break rest) = next rest
     next (Cons e _)   = Just e
