@@ -7,6 +7,8 @@ module ParseFut ( FutFunNames
                 , stateName
                 , labelName
                 , ffTestName
+                , arbFound
+                , propFound
                 , stateFound
                 , condFound
                 , showFound
@@ -16,6 +18,8 @@ module ParseFut ( FutFunNames
                 , fixEntries
                 , addStateGetters
                 , stripComments
+                , usableTest
+                , filtersplit
                 ) where
 
 import Debug.Trace (trace)
@@ -89,6 +93,10 @@ findTests source = tests
     tests  = reverse $ foldl' checkLine [] tokens
       --filterMap getTestName tokens
 
+usableTest test = arbFound test && propFound test
+filtersplit p list = foldr (\elm (ts,fs) -> if p elm then (elm:ts,fs) else (ts,elm:fs)) ([],[]) list
+
+
 arbName   ffnames = ffTestName ffnames ++ "arbitrary"
 propName  ffnames = ffTestName ffnames ++ "property"
 condName  ffnames = ffTestName ffnames ++ "condition"
@@ -109,22 +117,6 @@ stripComments = unWordsLines . fmap stripComment . wordsLines
   where
     wordsLines   = fmap words . lines
     unWordsLines = unlines . fmap unwords
-
---fixEntries :: [FutFunNames] -> String -> String
---fixEntries tests programtext = unwords $ help tests $ words programtext
---  where
-----    wordsLines   = fmap words . lines
-----    unWordsLines = unlines . fmap unwords
---    help tests (binding:function:rest)
---      | binding == "let" || binding == "entry" =
---        if function `isIn` tests
---        then "entry":function:help tests rest
---        else "let"  :function:help tests rest
---      | otherwise = binding:function:help tests rest
---      where f `isIn` tests  = any ((==f) . ffTestName) tests
---    help tests (other:rest) = other:help tests rest
---    help _ [] = []
-
 
 data Lada a = Cons a (Lada a) | Break (Lada a) | Nil
 list2lada [] = Nil
@@ -164,30 +156,6 @@ fixEntries tests programtext = lada2str $ fixer $ str2lada  programtext
     next Nil          = Nothing
     next (Break rest) = next rest
     next (Cons e _)   = Just e
-
---fixEntries :: [FutFunNames] -> String -> String
---fixEntries tests programtext = unWordsLines $ gybo $ wordsLines programtext
---  where
---    wordsLines   = fmap words . lines
---    unWordsLines = unlines . fmap unwords
---
---    gybo [] = []
---    gybo [[a]] = [[a]]
---    gybo ([]:rest) = []:gybo rest
---    gybo ([one]:(two:inners):outers) =
---      let (one',two') = f (one,two)
---      in [one]:gybo ((two':inners):outers)
---    gybo ((one:two:inners):outers) =
---      let (one', two') = f (one,two)
---          (head:rest) = gybo ((two':inners):outers)
---      in ((one':head):rest)
---
---    f (bind,name) =
---      if bind == "let" || bind == "empty"
---         && name `isIn` tests
---      then ("entry",name)
---      else ("let",  name)
---    name `isIn` tests = any (==name) $ ffTestName <$> tests
 
 
 addStateGetters programtext =

@@ -13,7 +13,22 @@ import GHC.Err (errorWithoutStackTrace)
 import System.Console.GetOpt (getOpt, ArgOrder(..), OptDescr(..), ArgDescr)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 
-import ParseFut (FutFunNames, findTests, only, without, fixEntries, addStateGetters, stripComments)
+import ParseFut ( FutFunNames
+                , findTests
+                , only
+                , without
+                , fixEntries
+                , addStateGetters
+                , stripComments
+                , usableTest
+                , filtersplit
+                , ffTestName
+                , arbFound
+                , propFound
+                , arbName
+                , propName
+                )
+
 
 import FutInterface ( newFutConfig
                     , newFutContext
@@ -106,6 +121,16 @@ parseArgs strArgs = args
                              , compiler = compiler
                              }
 
+-- assumes either arb or prop (or both) is missing
+snitchOn tests =
+  sequence $ map (\t ->
+                     putStrLn
+                     $ ffTestName t ++ " could not be tested because "
+                     ++ if not (arbFound t || propFound t) then
+                          arbName t ++ " and " ++ propName t ++ " weren't found"
+                        else (if not $ arbFound t then arbName t else propName t) ++ " wasn't found"
+                 ) tests
+
 main :: IO ()
 main = do
   args <- parseArgs <$> getArgs
@@ -113,7 +138,10 @@ main = do
   let filename = file args
 
   fileText <- readFile $ filename ++ ".fut"
-  let testNames = filterTests (whichTests args) (findTests fileText)
+  let tests = findTests fileText
+  let (goodtests,badtests) = filtersplit usableTest tests
+  snitchOn badtests
+  let testNames = filterTests (whichTests args) goodtests
 
   letThereBeDir tmpDir
 
