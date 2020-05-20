@@ -138,14 +138,14 @@ main = do
   let filename = file args
 
   fileText <- readFile $ filename ++ ".fut"
-  let tests = findTests fileText
+  let alltests = findTests fileText
+  let tests = filterTests (whichTests args) alltests
+
   let (goodtests,badtests) = filtersplit usableTest tests
-  snitchOn badtests
-  let testNames = filterTests (whichTests args) goodtests
 
   letThereBeDir tmpDir
 
-  let alteredprogram = addStateGetters $ fixEntries testNames $ fileText
+  let alteredprogram = addStateGetters $ fixEntries goodtests $ fileText
   tmpFutFile <- uniqueFile filename "fut"
   writeFile tmpFutFile alteredprogram
 
@@ -154,6 +154,8 @@ main = do
     TP.readProcess $ TP.proc "futhark" $ futArgs args tmpFutFile
   removeFile tmpFutFile
   exitOnCompilationError futExitCode futErr
+
+  snitchOn badtests
 
   (gccExitCode, gccOut, gccErr) <-
     TP.readProcess $ TP.proc "gcc" $ gccArgs args
@@ -164,7 +166,7 @@ main = do
   cfg <- newFutConfig dl
   ctx <- newFutContext dl cfg
 
-  states <- sequence $ map (mkDefaultState dl ctx) testNames
+  states <- sequence $ map (mkDefaultState dl ctx) goodtests
   sequence_ $ map ((putStrLn . result2str) <=< fucheck) states
   freeFutContext dl ctx
   newFutFreeConfig dl cfg
