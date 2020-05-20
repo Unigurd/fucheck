@@ -11,6 +11,7 @@ import System.Random (getStdGen, setStdGen, StdGen, randomIO)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 import GHC.Err (errorWithoutStackTrace)
 import System.Console.GetOpt (getOpt, ArgOrder(..), OptDescr(..), ArgDescr)
+import qualified Data.ByteString.Lazy.Char8 as BSL
 
 import ParseFut (FutFunNames, findTests, only, without, fixEntries, addStateGetters, stripComments)
 
@@ -34,11 +35,11 @@ letThereBeDir dir = do
     then createDirectory dir
     else return ()
 
-exitOnCompilationError exitCode filename =
+exitOnCompilationError exitCode msg =
   case exitCode of
     ExitSuccess -> return ()
     _           -> do
-      putStrLn $ "Could not compile " ++ filename
+      BSL.putStrLn $ msg
       exitFailure
 
 data WhichTests = All | Only [String] | Without [String]
@@ -124,11 +125,11 @@ main = do
   (futExitCode, futOut, futErr) <-
     TP.readProcess $ TP.proc "futhark" $ futArgs args tmpFutFile
   removeFile tmpFutFile
-  exitOnCompilationError futExitCode $ tmpFutFile
+  exitOnCompilationError futExitCode futErr
 
   (gccExitCode, gccOut, gccErr) <-
     TP.readProcess $ TP.proc "gcc" $ gccArgs args
-  exitOnCompilationError gccExitCode $ "generated C file"
+  exitOnCompilationError gccExitCode futErr
 
   dl <- DL.dlopen (tmpFile ++ ".so") [DL.RTLD_NOW] -- Read up on flags
 
