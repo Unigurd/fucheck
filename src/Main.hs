@@ -12,6 +12,8 @@ import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 import GHC.Err (errorWithoutStackTrace)
 import System.Console.GetOpt (getOpt, ArgOrder(..), OptDescr(..), ArgDescr)
 import qualified Data.ByteString.Lazy.Char8 as BSL
+import Data.List (foldl', break)
+import Debug.Trace(trace)
 
 import ParseFut ( FutFunNames
                 , findTests
@@ -68,6 +70,7 @@ futArgs args futFile =
     C      -> ["c",      "--library", "-o", tmpFile, futFile]
     OpenCL -> ["opencl", "--library", "-o", tmpFile, futFile]
 
+data Action = Run | SaveFile deriving Eq
 gccArgs args =
   case compiler args of
     C      -> [tmpFile ++ ".c",             "-o", tmpFile ++ ".so", "-fPIC", "-shared"]
@@ -77,20 +80,37 @@ gccArgs args =
 data Args = Args { file       :: String
                  , whichTests :: WhichTests
                  , compiler   :: Compiler
+                 , action     :: Action
                  }
 
-uniqueFile :: String -> String -> IO String
-uniqueFile basename filetype = do
-  -- what if fucheck is used from other dir?
-  let name = basename ++ "." ++ filetype
-  fileExists <- doesFileExist $ name
-  if fileExists
-  then do
-    int <- randomIO :: IO Integer
-    let newname = basename ++ show int
-    uniqueFile newname filetype
-  else return name
+defaultArgs file = Args { file       = file
+                        , whichTests = All
+                        , compiler   = C
+                        , action     = Run
+                        }
 
+data ArgsGiven = ArgsGiven { whichTestsGiven :: Bool
+                           , compilerGiven   :: Bool
+                           , actionGiven     :: Bool
+                           }
+defaultArgsGiven = ArgsGiven { whichTestsGiven = False
+                             , compilerGiven   = False
+                             , actionGiven     = False
+                             }
+
+uniqueFile :: String -> IO String
+uniqueFile filename = uncurry uniqueHelper $ break (=='.') filename
+  where
+    uniqueHelper basename filetype = do
+      -- what if fucheck is used from other dir?
+      let name = basename ++ filetype
+      fileExists <- doesFileExist $ name
+      if fileExists
+        then do
+        int <- randomIO :: IO Integer
+        let newname = basename ++ show int
+        uniqueHelper newname filetype
+        else return name
 
 
 tmpDir  = "/tmp/fucheck/"
@@ -101,7 +121,7 @@ getCompiler ("c":rest)      = (C, rest)
 getCompiler rest            = (C, rest)
 
 getFilename [] = errorWithoutStackTrace "Missing file argument"
-getFilename (filename: rest) = (filename, rest)
+getFilename (filename:rest) = (filename, rest)
 
 getFilter ["--without"] = errorWithoutStackTrace "Missing test arguments to --without"
 getFilter ["--only"]    = errorWithoutStackTrace "Missing test arguments to --only"
@@ -110,16 +130,92 @@ getFilter ("--only":tests)    = Only tests
 getFilter []                  = All
 getFilter garbage = errorWithoutStackTrace ("Did not understand: " ++ unwords garbage)
 
-parseArgs :: [String] -> Args
-parseArgs strArgs = args
+isFlag ('-':_) = True
+isFlag _       = False
+
+stdErrMsg = "Something went wrong parsing cmd line args"
+
+separateFlags :: [String] -> [[String]]
+separateFlags args = helper args []
   where
-    (compiler, rest0) = getCompiler strArgs
-    (filename, rest1) = getFilename rest0
-    testFilter        = getFilter rest1
-    args              = Args { file = filename
-                             , whichTests = testFilter
-                             , compiler = compiler
-                             }
+  helper [] acc = reverse <$> acc
+  helper (a:as) [] = helper as [[a]] -- Might add non-flag as flag here
+  helper (a:as) acc@(head_acc:tail_acc) =
+    if isFlag a then
+      helper as ([a]:acc)
+    else
+      helper as ((a:head_acc):tail_acc)
+
+
+compilerFlags   = ["c","--c","opencl","--opencl"]
+testFilterFlags = ["--only","--without"]
+actionFlags     = ["--tmp", "--run"]
+
+matches :: String -> [String] -> Bool
+flag `matches` flagList = or $ (flag ==) <$> flagList
+
+compFlag2comp "c"        = Right C
+compFlag2comp "--c"      = Right C
+compFlag2comp "opencl"   = Right OpenCL
+compFlag2comp "--opencl" = Right OpenCL
+compFlag2comp badFlag = Left $ "unrecognized compiler flag: " ++ badFlag
+
+testFilterFlag2testFilter ("--only":args)    = Right $ Only args
+testFilterFlag2testFilter ("--without":args) = Right $ Without args
+testFilterFlag2testFilter _ = Left stdErrMsg
+
+actionFlag2action "--tmp" = Right SaveFile
+actionFlag2action "--run" = Right Run
+actionFlag2action _ = Left stdErrMsg
+
+parseCompilerFlag [] _ = Left stdErrMsg
+parseCompilerFlag [flag] (args,given) =
+  if compilerGiven given then
+    Left "Compiler was specified more than once"
+  else do
+    comp <- compFlag2comp flag
+    Right $ (args { compiler = comp }, given { compilerGiven = True })
+parseCompilerFlag (flag:_) _ = Left $ "Compiler arg " ++ flag ++ " does not take arguments"
+
+parseTestFilter [] _ = Left stdErrMsg
+parseTestFilter flag (args,given) =
+  if whichTestsGiven given then
+    Left "Test filtering was specified more than once"
+  else do
+    testFilter <- testFilterFlag2testFilter flag
+    Right $ (args { whichTests = testFilter }, given { whichTestsGiven = True })
+
+--parseAction :: [String] -> 
+parseAction [] _ = Left stdErrMsg
+parseAction [flag] (args,given) =
+  if actionGiven given then
+    Left "Action was specified more than once"
+  else do
+    action <- actionFlag2action flag
+    Right $ (args { action = action }, given { actionGiven = True })
+
+-- shouldn't be named 'run'
+runFlag :: [String] -> Either String (Args,ArgsGiven) -> Either String (Args,ArgsGiven)
+runFlag [] _ = Left stdErrMsg
+runFlag (flag:flagArgs) eAcc = do
+  acc <- eAcc
+  if flag `matches` compilerFlags
+    then parseCompilerFlag (flag:flagArgs) acc
+    else if flag `matches` testFilterFlags
+    then parseTestFilter (flag:flagArgs) acc
+    else if flag `matches` actionFlags
+    then parseAction (flag:flagArgs) acc
+    else Left $ "Did not recognize flag " ++ flag
+
+parseArgs :: [String] -> Either String Args
+parseArgs [] = Left "No test file specified"
+parseArgs allStrArgs = parsedArgs
+  where
+    file    = last allStrArgs
+    strArgs = init allStrArgs
+    flags = separateFlags strArgs
+    parsedArgs = fst <$> foldr runFlag (Right (defaultArgs file, defaultArgsGiven)) flags
+
 
 -- assumes either arb or prop (or both) is missing
 snitchOn tests =
@@ -133,11 +229,16 @@ snitchOn tests =
 
 main :: IO ()
 main = do
-  args <- parseArgs <$> getArgs
+  eArgs <- parseArgs <$> getArgs
+  args <- case eArgs of
+        Left errMsg -> do
+          putStrLn errMsg
+          exitFailure
+        Right args -> return args
 
   let filename = file args
 
-  fileText <- readFile $ filename ++ ".fut"
+  fileText <- readFile $ filename
   let alltests = findTests fileText
   let tests = filterTests (whichTests args) alltests
 
@@ -146,9 +247,9 @@ main = do
   letThereBeDir tmpDir
 
   let alteredprogram = addStateGetters $ fixEntries goodtests $ fileText
-  tmpFutFile <- uniqueFile filename "fut"
+  tmpFutFile <- uniqueFile filename
   writeFile tmpFutFile alteredprogram
-
+  if action args == SaveFile then exitSuccess else return ()
 
   (futExitCode, futOut, futErr) <-
     TP.readProcess $ TP.proc "futhark" $ futArgs args tmpFutFile

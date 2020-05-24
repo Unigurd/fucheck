@@ -4,7 +4,6 @@ module Result ( Stage(..)
               , stage2str
               ) where
 
-import System.Exit (ExitCode(ExitSuccess), exitSuccess, exitFailure)
 import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
 import qualified Data.Map.Strict as M
 
