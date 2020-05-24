@@ -15,11 +15,9 @@ module ParseFut ( FutFunNames
                 , labelFound
                 , only
                 , without
-                , fixEntries
-                , addStateGetters
-                , stripComments
                 , usableTest
                 , filtersplit
+                , isFucheckFun
                 ) where
 
 import Debug.Trace (trace)
@@ -46,6 +44,7 @@ newFutFunNames name = FutFunNames
   , stateFound = False
   , labelFound = False
   }
+
 
 filterMap :: (a -> Maybe b) -> [a] -> [b]
 filterMap f = foldr (\elm acc -> case f elm of
@@ -111,62 +110,3 @@ isFucheckFun name test =
   || name == showName test
   || name == stateName test
   || name == labelName test
-
-stripComment [] = []
-stripComment (word:rest) =
-  if word `beginsWith` "--"
-  then [] else stripComment rest
-  where
-    beginsWith (a:as) (b:bs) = a == b && beginsWith as bs
-    beginsWith [] bs = False
-    beginsWith _ _   = True
-
-stripComments = unWordsLines . fmap stripComment . wordsLines
-  where
-    wordsLines   = fmap words . lines
-    unWordsLines = unlines . fmap unwords
-
-data Lada a = Cons a (Lada a) | Break (Lada a) | Nil
-list2lada [] = Nil
-list2lada (e:es) = Cons e $ list2lada es
-
-str2lada :: String -> Lada String
-str2lada = foldr (\elm acc -> comb (list2lada elm) (Break acc)) Nil . fmap words . lines
-  where
-    comb Nil la2 = la2
-    comb (Cons e es) la2 = Cons e (comb es la2)
-    comb (Break es)  la2 = Break (comb es la2)
-
-lada2str :: Lada String -> String
-lada2str Nil = []
-lada2str (Break es) = '\n':lada2str es
-lada2str (Cons e es) = e ++ " " ++ lada2str es
-
-fixEntries :: [FutFunNames] -> String -> String
-fixEntries tests programtext = lada2str $ fixer $ str2lada  programtext
-  where
-    fixer (Cons e es) =
-      if e == "let" || e == "entry"
-      then case (tests `contains`) <$> next es of
-             Just True  -> Cons "entry" (fixer es)
-             Just False -> Cons "let" (fixer es)
-             Nothing    -> es
-      else Cons e (fixer es)
-    fixer (Break acc) = Break $ fixer acc
-    fixer Nil = Nil
-
-    tests `contains` testname = any (isFucheckFun testname) tests
-
-
-    next Nil          = Nothing
-    next (Break rest) = next rest
-    next (Cons e _)   = Just e
-
-
-addStateGetters programtext =
-  programtext
-  ++ unlines [ "entry maxtests (state : state) : maxtests = state.maxtests"
-             , "entry maxsize  (state : state) : maxsize = state.maxsize"
-             , "entry maxdiscardedratio (state : state) : maxdiscardedratio = state.maxdiscardedratio"
-             ]
-

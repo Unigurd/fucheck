@@ -19,9 +19,6 @@ import ParseFut ( FutFunNames
                 , findTests
                 , only
                 , without
-                , fixEntries
-                , addStateGetters
-                , stripComments
                 , usableTest
                 , filtersplit
                 , ffTestName
@@ -30,7 +27,10 @@ import ParseFut ( FutFunNames
                 , arbName
                 , propName
                 )
-
+import WriteFut ( fixEntries
+                , combineFutFuns
+                , addStateGetters
+                )
 
 import FutInterface ( newFutConfig
                     , newFutContext
@@ -246,7 +246,11 @@ main = do
 
   letThereBeDir tmpDir
 
-  let alteredprogram = addStateGetters $ fixEntries goodtests $ fileText
+  let alteredprogram =
+        unlines [ fixEntries goodtests fileText
+--                , unlines (combineFutFuns <$> goodtests)
+                , addStateGetters
+                ]
   tmpFutFile <- uniqueFile filename
   writeFile tmpFutFile alteredprogram
   if action args == SaveFile then exitSuccess else return ()
