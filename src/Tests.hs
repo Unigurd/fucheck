@@ -18,7 +18,7 @@ useArb state = do
   let seed = S.getSeed state
   eTestdata <- runExceptT $ (S.arbitrary state) (S.size state) seed
   case eTestdata of
-    Left arbExitCode -> return $ R.SingleException state (R.Arb arbExitCode)
+    Left arbExitCode -> return $ R.SingleException (R.Arb arbExitCode)
     Right testdata -> useCond state testdata
 
 
@@ -30,10 +30,10 @@ useCond state testdata =
       case eCond of
         Left condExitCode -> do
           shownInput <- sequence $ runExceptT <$> S.shower state *< testdata
-          return $ R.SingleException state (R.Cond condExitCode)
+          return $ R.SingleException (R.Cond condExitCode)
         Right cond -> do
           if not cond then
-            return $ R.SingleGaveUp state
+            return $ R.SingleGaveUp 
             else useProp state testdata
 
 useProp state testdata = do
@@ -41,23 +41,21 @@ useProp state testdata = do
   case eResult of
     Left propExitCode -> do
       shownInput <- sequence $ runExceptT <$> S.shower state *< testdata
-      return $ R.SingleException state $ R.Prop propExitCode
+      return $ R.SingleException $ R.Prop propExitCode
     Right result -> do
       if result then do
         elabel <- sequence $ runExceptT <$> S.labeler state *< testdata
         case elabel of
           Nothing -> do
-            return $ R.SingleSuccess state
+            return $ R.SingleSuccess Nothing
           Just (Right label) -> do
-            return $ R.SingleSuccess $ state { S.labels = MS.alter alterFun label <$> S.labels state }
-            where
-              alterFun (Nothing) = Just 1
-              alterFun (Just n)  = Just $ n + 1
+            -- move change of state out to fucheck
+            return $ R.SingleSuccess (Just label)
           Just (Left labelExitCode) ->
-            return $ R.SingleException state $ R.Label labelExitCode
+            return $ R.SingleException $ R.Label labelExitCode
         else do
         shownInput <- sequence $ runExceptT <$> S.shower state *< testdata
-        return $ R.SingleFailure state shownInput
+        return $ R.SingleFailure shownInput
 
 
 fucheck :: S.State -> IO R.Result
@@ -78,22 +76,26 @@ fucheck state
   | otherwise = do
   result <- singleCheck state
   case result of
-    R.SingleSuccess state ->
+    R.SingleSuccess label ->
       fucheck $ state { S.randomSeed = S.nextGen state
                       , S.numSuccessTests = S.numSuccessTests state + 1
                       , S.numRecentlyDiscardedTests = 0
+                      , S.labels = (MS.alter alterFun <$> label) <*> S.labels state
                       }
-    R.SingleGaveUp state ->
+      where
+        alterFun (Nothing) = Just 1
+        alterFun (Just n)  = Just $ n + 1
+    R.SingleGaveUp ->
       fucheck $ state { S.randomSeed = S.nextGen state
                       , S.numDiscardedTests = S.numDiscardedTests state + 1
                       , S.numRecentlyDiscardedTests = S.numRecentlyDiscardedTests state + 1
                       }
-    R.SingleFailure state shownInput ->
+    R.SingleFailure shownInput ->
       return $ R.Failure { R.resultTestName = S.stateTestName state
                        , R.shownInput     = shownInput
                        , R.resultSeed     = S.getSeed state
                        }
-    R.SingleException state stage ->
+    R.SingleException stage ->
       return $ R.Exception { R.resultTestName = S.stateTestName state
                            , R.shownInput     = Nothing
                            , R.errorStage     = stage

@@ -50,7 +50,7 @@ data Result =
     }
 
 data SingleResult =
-    SingleSuccess   State
-  | SingleFailure   State (Maybe (Either CInt String))
-  | SingleGaveUp    State
-  | SingleException State Stage
+    SingleSuccess   (Maybe String)
+  | SingleFailure   (Maybe (Either CInt String))
+  | SingleGaveUp
+  | SingleException Stage
