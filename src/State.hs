@@ -4,6 +4,7 @@ module State ( State(..)
              , getSeed
              , nextGen
              , nextState
+             , runArbitrary
              ) where
 
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
@@ -48,6 +49,8 @@ nextState state = (cInt, newState)
     cInt         = toEnum int
     newState     = state {randomSeed = newGen}
 
+runArbitrary state =
+  arbitrary state (size state) (getSeed state)
 
 mkDefaultState :: DL.DL -> Ptr Futhark_Context -> PF.FutFunNames -> IO State
 mkDefaultState dl ctx testNames = do

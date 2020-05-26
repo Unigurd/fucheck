@@ -8,7 +8,7 @@ import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
 import qualified Data.Map.Strict as M
 
 import FutInterface (CInt)
-import State (State)
+import State (State, stateTestName, getSeed)
 
 data Stage =
     Arb   {exitCode :: CInt}
@@ -34,7 +34,7 @@ data Result =
     -- Nothing if no attempt at showing could be made
     -- Just Left if it tried to generate a string but failed
     -- Just Right if a string was successfully generated
-    , shownInput     :: Maybe (Either CInt String)
+    , shownInput     :: Maybe String
     , resultSeed     :: CInt
     }
   | GaveUp
@@ -44,13 +44,13 @@ data Result =
     }
   | Exception
     { resultTestName :: String
-    , shownInput     :: Maybe (Either CInt String)
+    , shownInput     :: Maybe String
     , errorStage     :: Stage
     , resultSeed     :: CInt
     }
 
 data SingleResult =
-    SingleSuccess   (Maybe String)
-  | SingleFailure   (Maybe (Either CInt String))
+    SingleSuccess (Maybe String) -- The label
+  | SingleFailure
   | SingleGaveUp
   | SingleException Stage
