@@ -11,6 +11,7 @@ import System.Random (getStdGen, setStdGen, StdGen, randomIO)
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
 import GHC.Err (errorWithoutStackTrace)
 import System.Console.GetOpt (getOpt, ArgOrder(..), OptDescr(..), ArgDescr)
+import Data.String (fromString)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.List (foldl', break)
 import Debug.Trace(trace)
@@ -254,6 +255,14 @@ main = do
   tmpFutFile <- uniqueFile filename
   writeFile tmpFutFile alteredprogram
   if action args == SaveFile then exitSuccess else return ()
+
+  (whichFutharkExitCode, _, _) <-
+    TP.readProcess $ TP.proc "which" ["futhark"]
+  exitOnCompilationError whichFutharkExitCode $ fromString "futhark does not seem to be installed"
+
+  (whichGCCExitCode, _, _) <-
+    TP.readProcess $ TP.proc "which" ["gcc"]
+  exitOnCompilationError whichGCCExitCode $ fromString "gcc does not seem to be installed"
 
   (futExitCode, futOut, futErr) <-
     TP.readProcess $ TP.proc "futhark" $ futArgs args tmpFutFile
