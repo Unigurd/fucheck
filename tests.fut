@@ -246,3 +246,17 @@ entry prop_maybearr [n] (input : testdata ([n](maybe i32))) : bool =
 
 entry show_maybearr [n] (input : testdata ([n](maybe i32))) : []u8 =
   showArray (show_maybe showdecimali32) (untestdata input)
+
+
+-- fucheck show_crash
+let gen_show_crash = arbi32
+let prop_show_crash (input : testdata i32) =
+  match input
+  case #testdata i -> false
+--    let c = i/0
+--    in if c != 0 then false else true
+let show_show_crash (input : testdata i32) =
+  match input
+  case #testdata i ->
+    let c = i/0
+    in showdecimali32 c
