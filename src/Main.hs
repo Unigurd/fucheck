@@ -237,6 +237,7 @@ main = do
           exitFailure
         Right args -> return args
 
+  -- preprocessing
   let filename = file args
 
   fileText <- readFile $ filename
@@ -249,13 +250,13 @@ main = do
 
   let alteredprogram =
         unlines [ fixEntries goodtests fileText
---                , unlines (combineFutFuns <$> goodtests)
                 , addStateGetters
                 ]
   tmpFutFile <- uniqueFile filename
   writeFile tmpFutFile alteredprogram
   if action args == SaveFile then exitSuccess else return ()
 
+  -- compilation
   (whichFutharkExitCode, _, _) <-
     TP.readProcess $ TP.proc "which" ["futhark"]
   exitOnCompilationError whichFutharkExitCode $ fromString "futhark does not seem to be installed"

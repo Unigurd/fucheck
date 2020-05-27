@@ -1,27 +1,16 @@
 module Result ( Stage(..)
               , Result(..)
-              , SingleResult(..)
+--              , SingleResult(..)
               , stage2str
               ) where
 
 import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
 import qualified Data.Map.Strict as M
 
-import FutInterface (CInt)
+import FutInterface (CInt, Stage(..), stage2str)
 import State (State, stateTestName, getSeed)
 
-data Stage =
-    Arb   {exitCode :: CInt}
-  | Prop  {exitCode :: CInt}
-  | Cond  {exitCode :: CInt}
-  | Show  {exitCode :: CInt}
-  | Label {exitCode :: CInt}
 
-stage2str (Arb _)   = "arbitrary"
-stage2str (Prop _)  = "property"
-stage2str (Cond _)  = "condition"
-stage2str (Show _)  = "show"
-stage2str (Label _) = "label"
 
 data Result =
     Success
@@ -49,8 +38,8 @@ data Result =
     , resultSeed     :: CInt
     }
 
-data SingleResult =
-    SingleSuccess (Maybe String) -- The label
-  | SingleFailure
-  | SingleGaveUp
-  | SingleException Stage
+--data SingleResult =
+--    SingleSuccess (Maybe String) -- The label
+--  | SingleFailure
+--  | SingleGaveUp
+--  | SingleException Stage

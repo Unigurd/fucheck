@@ -12,7 +12,10 @@ module FutInterface ( Futhark_Context
                     , futGetStateField
                     , Ptr
                     , CInt(CInt)
-                    , CBool(CBool)) where
+                    , CBool(CBool)
+                    , Stage(..)
+                    , stage2str
+                    ) where
 
 import Foreign.Ptr (Ptr, FunPtr)--,castFunPtrToPtr,nullFunPtr)
 import Data.Word (Word8)
@@ -23,6 +26,21 @@ import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Array (allocaArray, peekArray)
 import qualified System.Posix.DynamicLinker as DL
 import Codec.Binary.UTF8.String (decode)
+
+data Stage =
+    Arb   {exitCode :: CInt}
+  | Prop  {exitCode :: CInt}
+  | Cond  {exitCode :: CInt}
+  | Show  {exitCode :: CInt}
+  | Label {exitCode :: CInt}
+  | GetState {exitCode :: CInt}
+
+stage2str (Arb _)   = "arbitrary"
+stage2str (Prop _)  = "property"
+stage2str (Cond _)  = "condition"
+stage2str (Show _)  = "show"
+stage2str (Label _) = "label"
+stage2str (GetState _) = "state"
 
 data Futhark_Context_Config
 data Futhark_Context
@@ -93,18 +111,19 @@ getFutState dl ctx name = do
     Right futState -> return futState
     Left exitCode -> error $ "Failed loading " ++ name ++ ".\nFailed with exit code " ++ show exitCode
 
--- make static
+-- make static ?
 foreign import ccall "dynamic"
   mkGetStateField :: FunPtr (Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt)
                           -> Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt
 
--- make static
+-- make static ?
 futGetStateField dl ctx futState field = do
   fieldfun <- DL.dlsym dl ("futhark_entry_" ++ field)
-  eitherfield <- runExceptT $ haskify (mkGetStateField fieldfun) ctx futState
+  eitherfield <- runExceptT $ haskify (mkGetStateField fieldfun) ctx GetState futState
   case eitherfield of
     Right field -> return field
-    Left exitCode -> error $ "Failed getting " ++ field ++ " with exit code " ++ show exitCode
+    Left errVal ->
+      error $ "Failed getting " ++ field ++ " with exit code " ++ show (exitCode errVal)
 
 foreign import ccall "dynamic"
   mkFutShape :: FunPtr (Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr CInt))
@@ -120,39 +139,40 @@ foreign import ccall "dynamic"
   mkFutValues :: FunPtr ValuesType -> ValuesType
 mkValues :: DL.DL
          -> Ptr Futhark_Context
+         -> (CInt -> Stage)
          -> FunPtr ValuesType
          -> Ptr Futhark_u8_1d
-         -> ExceptT CInt IO String
-mkValues dl ctx valuesPtr futArr = ExceptT $ do
+         -> ExceptT Stage IO String
+mkValues dl ctx stage valuesPtr futArr = ExceptT $ do
   shape <- futShape dl ctx futArr
   eitherArr <- runExceptT $ haskifyArr (fromIntegral shape) (mkFutValues valuesPtr ctx) futArr
   case eitherArr of
     Right hsList -> do
       return $ Right $ decode hsList
-    Left errorcode -> return $ Left errorcode
+    Left errorcode -> return $ Left $ stage errorcode
 
 foreign import ccall "dynamic"
   mkFutArb :: FunPtr ArbitraryType -> ArbitraryType
 
 mkArbitrary dl ctx name = do
   arbPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
-  return $ haskify2 (mkFutArb arbPtr) ctx
+  return $ haskify2 (mkFutArb arbPtr) ctx Arb
 
 foreign import ccall "dynamic"
   mkFutProp :: FunPtr PropertyType -> PropertyType
-mkProperty dl ctx name = do
+mkProperty dl ctx stage name = do
   propPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
-  return $ \input -> (0 /=) <$> (haskify (mkFutProp propPtr) ctx input)
+  return $ \input -> (0 /=) <$> (haskify (mkFutProp propPtr) ctx stage input)
 
 
 foreign import ccall "dynamic"
   mkFutShow :: FunPtr ShowType -> ShowType
-mkShow dl ctx name = do
+mkShow dl ctx stage name = do
   showPtr   <- DL.dlsym dl ("futhark_entry_" ++ name)
   futValues <- DL.dlsym dl "futhark_values_u8_1d"
   return $ \input -> do
-    u8arr <- haskify (mkFutShow showPtr) ctx input
-    mkValues dl ctx futValues u8arr
+    u8arr <- haskify (mkFutShow showPtr) ctx stage input
+    mkValues dl ctx stage futValues u8arr
 
 haskify0 :: Storable out
         => (Ptr Futhark_Context -> Ptr out -> IO CInt)
@@ -168,27 +188,29 @@ haskify0 c_fun ctx =
 haskify :: Storable out
         => (Ptr Futhark_Context -> Ptr out -> input -> IO CInt)
         -> Ptr Futhark_Context
+        -> (CInt -> Stage)
         -> input
-        -> ExceptT CInt IO out
-haskify c_fun ctx input =
+        -> ExceptT Stage IO out
+haskify c_fun ctx stage input =
   ExceptT $ alloca $ (\outPtr -> do
     exitcode <- c_fun ctx outPtr input
     if exitcode == 0
     then (return . Right) =<< peek outPtr
-    else return $ Left exitcode)
+    else return $ Left $ stage exitcode)
 
 haskify2 :: Storable out
         => (Ptr Futhark_Context -> Ptr out -> input1 -> input2 -> IO CInt)
         -> Ptr Futhark_Context
+        -> (CInt -> Stage)
         -> input1
         -> input2
-        -> ExceptT CInt IO out
-haskify2 c_fun ctx input1 input2 =
+        -> ExceptT Stage IO out
+haskify2 c_fun ctx stage input1 input2 =
   ExceptT $ alloca $ (\outPtr -> do
     exitcode <- c_fun ctx outPtr input1 input2
     if exitcode == 0
     then (return . Right) =<< peek outPtr
-    else return $ Left exitcode)
+    else return $ Left $ stage exitcode)
 
 haskifyArr size c_fun input =
   ExceptT $ allocaArray (fromIntegral size) $ (\outPtr -> do

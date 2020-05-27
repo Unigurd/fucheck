@@ -1,126 +1,143 @@
 {-# language ScopedTypeVariables #-}
-module Tests (singleCheck, fucheck, result2str) where
+module Tests (fucheck, result2str) where
 
 import Data.List (foldl', sortOn)
+import Data.Either (either)
 import Control.Monad (join)
-import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT, throwE)
+import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT, throwE, except)
 import qualified Data.Map.Strict as MS
 
 import qualified Result  as R
+import Result (Stage)
 import qualified Message as M
 import qualified State   as S
-import FutInterface (CInt)
+import FutInterface (CInt, Ptr, FutharkTestData)
 
 either2maybe (Right r) = Just r
 either2maybe (Left _)  = Nothing
 
 f *< a = f <*> pure a
 
-singleCheck :: S.State -> IO R.SingleResult
-singleCheck = useArb
 
-useArb state = do
-  eTestdata <- runExceptT $ S.runArbitrary state
-  case eTestdata of
-    Left arbExitCode -> return $ R.SingleException (R.Arb arbExitCode)
-    Right testdata -> useCond state testdata
+-- change name from 'run'
+-- Nothing if no inputs passed the condition. Just Left if something crashed
+runGen :: S.State -> IO (S.State, Maybe (Either Stage (Ptr FutharkTestData)))
+--runGen :: S.State -> (S.State, ExceptT Stage IO (Maybe (Ptr futharkTestData)))
+runGen state
+  -- Max number of attempts at generating testdata reached
+  | S.numRecentlyDiscardedTests state >= S.maxDiscardedRatio state = return (state, Nothing)
 
+  -- Try to generate testdata
+  | otherwise = do
+      eTestdata <- runExceptT $ S.runArbitrary state
+      case (S.condition state, eTestdata) of
+        --(Nothing, _) -> return (state, return $ onLeft (\errcode -> R.Arb errcode) eTestdata)
 
-useCond state testdata =
-  case S.condition state of
-    Nothing -> useProp state testdata
-    Just realcond -> do
-      eCond <- runExceptT $ realcond testdata
-      case eCond of
-        Left condExitCode ->
-          return $ R.SingleException (R.Cond condExitCode)
-        Right cond -> do
-          if not cond then
-            return $ R.SingleGaveUp
-            else useProp state testdata
+        -- Arb errored
+        (_, Left arbExitCode) ->
+          return (state, return $ Left arbExitCode)
 
-useProp state testdata = do
-  eResult <- runExceptT $ (S.property state) testdata
-  case eResult of
-    Left propExitCode ->
-      return $ R.SingleException $ R.Prop propExitCode
-    Right result -> do
-      if result then do
-        elabel <- sequence $ runExceptT <$> S.labeler state *< testdata
-        case elabel of
-          Nothing -> do
-            return $ R.SingleSuccess Nothing
-          Just (Right label) -> do
-            -- move change of state out to fucheck
-            return $ R.SingleSuccess (Just label)
-          Just (Left labelExitCode) ->
-            return $ R.SingleException $ R.Label labelExitCode
-        else return $ R.SingleFailure
+        -- No condition, so just return testdata
+        (Nothing, Right testdata) ->
+          return (state, Just $ return testdata)
 
+        -- Condition is specified
+        (Just cond, Right testdata) -> do
+          condResult <- runExceptT $ cond testdata
+          case condResult of
+
+            -- Condition errored
+            Left errorcode -> return $ (state, Just $ Left errorcode)
+            -- Condition didn't crash
+            Right b ->
+              if b
+              -- testdata fulfilled condition
+              then return  (state { S.numRecentlyDiscardedTests = 0 }, return $ return testdata)
+              -- testdata didn't fulfill condition, so try again
+              else runGen $ state { S.numRecentlyDiscardedTests =
+                                      S.numRecentlyDiscardedTests state + 1
+                                  , S.randomSeed = S.nextGen state
+                                  }
+        where
+          -- Why doesn't onLeft work in the commented line above?
+          onLeft f (Left l) = Left $ f l
+          onLeft _ rightval  = rightval
+
+foundException state exitcode string =
+  R.Exception { R.resultTestName = S.stateTestName state
+              , R.shownInput     = string
+              , R.errorStage     = exitcode
+              , R.resultSeed     = S.getSeed state
+              }
+
+shownInput :: S.State -> ExceptT Stage IO (Maybe String)
+shownInput state =
+  case S.shower state of
+    Nothing -> return Nothing
+    Just s -> Just <$> (s =<< S.runArbitrary state)
+
+ignoreShowException = join . either2maybe
 
 fucheck :: S.State -> IO R.Result
-fucheck state
-  | S.numSuccessTests state >= S.maxSuccessTests state =
-      return $ R.Success
-      { R.resultTestName = S.stateTestName state
-      , R.numTests       = S.numSuccessTests state
-      , R.resultLabels   = S.labels state
-      }
+fucheck state = do
+  finalResult <- runExceptT $ fucheckRec state
+  case finalResult of
+    Right result -> return result
+    Left  errVal -> do
+      s <- runExceptT $ shownInput state
+      return $ foundException state errVal $ ignoreShowException s
 
-  | S.numRecentlyDiscardedTests state >= S.maxDiscardedRatio state =
-    return $ R.GaveUp { R.resultTestName = S.stateTestName state
-                      , R.resultSeed     = S.getSeed state
-                      , R.numTests       = S.numSuccessTests state
-                      }
+  where
+    fucheckRec :: S.State -> ExceptT Stage IO R.Result
+    fucheckRec state
+      -- Passed all tests
+      | S.numSuccessTests state >= S.maxSuccessTests state =
+        return $ R.Success
+        { R.resultTestName = S.stateTestName state
+        , R.numTests       = S.numSuccessTests state
+        , R.resultLabels   = S.labels state
+        }
 
-  | otherwise = do
-  result <- singleCheck state
-  case result of
-    R.SingleSuccess label ->
-      fucheck $ state { S.randomSeed = S.nextGen state
-                      , S.numSuccessTests = S.numSuccessTests state + 1
-                      , S.numRecentlyDiscardedTests = 0
-                      , S.labels = (MS.alter alterFun <$> label) <*> S.labels state
-                      }
-      where
-        alterFun (Nothing) = Just 1
-        alterFun (Just n)  = Just $ n + 1
+      -- otherwise
+      | otherwise = do
+          (state, mTestdata) <- ExceptT $ return <$> runGen state
+          case mTestdata of
 
-    R.SingleGaveUp ->
-      fucheck $ state { S.randomSeed = S.nextGen state
-                      , S.numDiscardedTests = S.numDiscardedTests state + 1
-                      , S.numRecentlyDiscardedTests = S.numRecentlyDiscardedTests state + 1
-                      }
+            -- Could not generate data that passed the precondition
+            Nothing ->
+              return $ R.GaveUp { R.resultTestName = S.stateTestName state
+                                , R.resultSeed     = S.getSeed state
+                                , R.numTests       = S.numSuccessTests state
+                                }
 
-    R.SingleFailure -> do
-      s <- runExceptT shownInput
-      case s of
-        Right sjov ->
-          return $ R.Failure { R.resultTestName = S.stateTestName state
-                             , R.shownInput     = sjov
-                             , R.resultSeed     = S.getSeed state
-                             }
-        Left exitCode ->
-          return $ R.Exception { R.resultTestName = S.stateTestName state
-                               , R.shownInput     = Nothing
-                               , R.errorStage     = R.Show exitCode
-                               , R.resultSeed     = S.getSeed state
-                               }
+            Just eTestdata -> do
+              testdata <- except eTestdata
+              result <- S.property state testdata
+              if result then do
+                case S.labeler state *< testdata of
+                  Nothing ->
+                    fucheckRec $ state { S.randomSeed = S.nextGen state
+                                    , S.numSuccessTests = S.numSuccessTests state + 1
+                                    , S.numRecentlyDiscardedTests = 0
+                                    }
+                  -- Labeling succeeded
+                  Just eLabel -> do
+                    label <- eLabel
+                    fucheckRec $ state { S.randomSeed = S.nextGen state
+                                    , S.numSuccessTests = S.numSuccessTests state + 1
+                                    , S.numRecentlyDiscardedTests = 0
+                                    , S.labels = (MS.alter alterFun <$> Just label) <*> S.labels state
+                                    }
+                      where
+                        alterFun (Nothing) = Just 1
+                        alterFun (Just n)  = Just $ n + 1
 
-    R.SingleException stage -> do
-      s <- runExceptT shownInput
-      return $ R.Exception { R.resultTestName = S.stateTestName state
-                           , R.shownInput     = join $ either2maybe s
-                           , R.errorStage     = stage
-                           , R.resultSeed     = S.getSeed state
-                           }
-
-    where
-      shownInput :: ExceptT CInt IO (Maybe String)
-      shownInput =
-        case S.shower state of
-          Nothing -> return Nothing
-          Just s -> Just <$> (s =<< S.runArbitrary state)
+                else do
+                s <- shownInput state
+                return $ R.Failure { R.resultTestName = S.stateTestName state
+                                   , R.shownInput     = s
+                                   , R.resultSeed     = S.getSeed state
+                                   }
 
 
 result2str :: R.Result -> String

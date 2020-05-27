@@ -14,15 +14,15 @@ import qualified Data.Map.Strict as M
 
 import qualified ParseFut as PF
 import qualified FutInterface as FI
-import FutInterface (CInt, Ptr, FutharkTestData, Futhark_Context)
+import FutInterface (CInt, Ptr, FutharkTestData, Futhark_Context, Stage(..))
 
 data State = MkState
   { stateTestName             :: String
-  , arbitrary                 :: CInt -> CInt -> ExceptT CInt IO (Ptr FutharkTestData)
-  , property                  :: Ptr FutharkTestData -> ExceptT CInt IO Bool
-  , condition                 :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO Bool)
-  , shower                    :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
-  , labeler                   :: Maybe (Ptr FutharkTestData -> ExceptT CInt IO String)
+  , arbitrary                 :: CInt -> CInt -> ExceptT Stage IO (Ptr FutharkTestData)
+  , property                  :: Ptr FutharkTestData -> ExceptT Stage IO Bool
+  , condition                 :: Maybe (Ptr FutharkTestData -> ExceptT Stage IO Bool)
+  , shower                    :: Maybe (Ptr FutharkTestData -> ExceptT Stage IO String)
+  , labeler                   :: Maybe (Ptr FutharkTestData -> ExceptT Stage IO String)
   , labels                    :: Maybe (M.Map String CInt)
   , numSuccessTests           :: CInt
   , maxSuccessTests           :: CInt
@@ -56,15 +56,15 @@ mkDefaultState :: DL.DL -> Ptr Futhark_Context -> PF.FutFunNames -> IO State
 mkDefaultState dl ctx testNames = do
   gen <- getStdGen
   dynArb  <- FI.mkArbitrary dl ctx $ PF.arbName testNames
-  dynProp <- FI.mkProperty  dl ctx $ PF.propName testNames
+  dynProp <- FI.mkProperty  dl ctx Prop $ PF.propName testNames
   dynCond <- if PF.condFound testNames
-             then Just <$> FI.mkProperty dl ctx (PF.condName testNames)
+             then Just <$> FI.mkProperty dl ctx Cond (PF.condName testNames)
              else return Nothing
   dynShow <- if PF.showFound testNames
-             then Just <$> FI.mkShow dl ctx (PF.showName testNames)
+             then Just <$> FI.mkShow dl ctx Show (PF.showName testNames)
              else return Nothing
   dynLabel <- if PF.labelFound testNames then
-                Just <$> FI.mkShow dl ctx (PF.labelName testNames)
+                Just <$> FI.mkShow dl ctx Label (PF.labelName testNames)
               else return Nothing
   (dynMST, dynMS, dynMDR) <-
     if PF.stateFound testNames
