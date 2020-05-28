@@ -260,3 +260,13 @@ let show_show_crash (input : testdata i32) =
   case #testdata i ->
     let c = i/0
     in showdecimali32 c
+
+-- fucheck rev_id
+let gen_rev_id size seed =
+  let rngs = split_rng 2 <| rng_from_seed seed
+  let sizes = getsizes size rngs[0] 1
+  in arbitraryarr (maybegen arbitraryi32) sizes[0] size rngs[1]
+
+let prop_rev_id (input : testdata ([]i32)) =
+  match input
+  case #testdata arr -> reverse (reverse arr) == arr
