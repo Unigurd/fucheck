@@ -18,7 +18,7 @@ extra-source-files:  CHANGELOG.md
 
 executable fucheck
   main-is:             Main.hs
-  other-modules:       FutInterface, Message, Result, Tests, State, ParseFut, WriteFut
+  other-modules:       FutInterface, Message, Result, Tests, State, ParseFut, WriteFut, CLI
   -- other-extensions:
   build-depends:       base==4.14.0.0
                      , ghc==8.10.1
