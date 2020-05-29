@@ -6,28 +6,16 @@ module Gen = {
   type^ gen 'a           = size -> rng -> testdata a
 
 
-  let testdata 'n (n : n) : testdata n = #testdata n
-  let untestdata 'elm (td : testdata elm) : elm =
-    match td
-    case #testdata elm -> elm
 
-
-  let get 'elm (td : testdata elm) : elm =
-    match td
-    case #testdata elm -> elm
-
-  let snd (_,b) = b
-
--- instead of arbitrarysortedarray
--- so as not to write a sorting function / add a dependency
--- simply supply an array generator and a sorting function
-let transformgen 'a 'b (f : a -> b) (g : gen a) : gen b =
-  (\size rng ->
-     let b =
-       match g size rng
-       case #testdata a -> f a
-     in #testdata b)
-
+  -- instead of arbitrarysortedarray
+  -- so as not to write a sorting function / add a dependency
+  -- simply supply an array generator and a sorting function
+  let transformgen 'a 'b (f : a -> b) (g : gen a) : gen b =
+    (\size rng ->
+       let b =
+         match g size rng
+         case #testdata a -> f a
+       in #testdata b)
 
   let choose_i8 (bounds : (i8,i8)) : gen i8 =
     (\_ r -> #testdata (rand_i8 bounds r))
@@ -139,8 +127,6 @@ let transformgen 'a 'b (f : a -> b) (g : gen a) : gen b =
            : gen elm =
     frequencyof5 (1,gen0) (1,gen1) (1,gen2) (1,gen3) (1,gen4)
 
-
-
   let elements 'elm [n] (elms : [n]elm) : gen elm =
     (\_ rng ->
        let i = rand_i32 (0,n-1) rng
@@ -231,7 +217,7 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
     \_ rng ->
       let rngs = split_rng 2 rng
       in #testdata (f32.from_bits <| ( rand_u32 (0,1) rngs[0] << 31 )
-                                          & rand_u32 (0, 0x007fffff) rngs[1] )
+                                     & rand_u32 (0, 0x007fffff) rngs[1] )
 
   let arbitrary_f32_normal : gen f32 =
     \size rng ->
@@ -393,9 +379,9 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
                  (size3 : size)
                  (size4 : size)
                  : gen ([size0][size1][size2][size3][size4]elm) =
-  (\maxsize rng ->
-     let arr3d = arbitrary3darr arbitraryelm size2 size3 size4
-     let arr4d = arbitrary2darr arr3d size0 size1
-     in arr4d maxsize rng)
+    (\maxsize rng ->
+       let arr3d = arbitrary3darr arbitraryelm size2 size3 size4
+       let arr4d = arbitrary2darr arr3d size0 size1
+       in arr4d maxsize rng)
 
 }

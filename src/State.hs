@@ -74,7 +74,7 @@ mkDefaultState dl ctx testNames = do
       ms    <- FI.futGetStateField dl ctx state "maxsize"
       mdr   <- FI.futGetStateField dl ctx state "maxdiscardedratio"
       return (mt,ms,mdr)
-    else return (100, 100, 100) -- move defaults to fut
+    else return (100, 100, 100) -- move defaults to fut ?
   return $ MkState
     { stateTestName             = PF.ffTestName testNames
     , arbitrary                 = dynArb

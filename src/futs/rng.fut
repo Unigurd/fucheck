@@ -6,7 +6,7 @@ module dist = uniform_int_distribution i64 minstd_rand
 module Rng = {
   open Types
 
-  type rng = minstd_rand.rng
+ type rng = minstd_rand.rng
 
   let snd (_,b) = b
 

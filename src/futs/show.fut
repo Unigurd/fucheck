@@ -1,11 +1,14 @@
+import "types"
 module Show = {
+  open Types
+
   type sign = #positive | #negative
 
 -- Greatest lower power of exp
 let glp (factor : i32) (n :i32) =
   loop i = 1 while (factor ** i) <= n do i + 1
 
-  let showBase36 digit : u8 =
+  let show_base36 digit : u8 =
     match digit
     case 0  -> '0'
     case 1  -> '1'
@@ -47,7 +50,7 @@ let glp (factor : i32) (n :i32) =
 
 
 
-  let showSign (sign : sign) = match sign
+  let show_sign (sign : sign) = match sign
                                case #positive -> ""
                                case #negative -> "-"
 
@@ -60,125 +63,130 @@ let glp (factor : i32) (n :i32) =
     loop (digits, remainder) = ([], n)
     for i in digitArr
     do (digits ++ [remainder / (base**i)],remainder % (base**i))
-in digits
-    )
+  in digits)
 
   let num2str prefix stringify base num =
   let (sign, digits) = digify base num
-  in showSign sign ++ prefix ++ (map stringify digits)
+  in show_sign sign ++ prefix ++ (map stringify digits)
 
-  let showbool b = if b then "true" else "false"
+  let showbool b = if get b then "true" else "false"
 
-  let showdecimali32 = num2str ""   showBase36 10
-  let showhexi32     = num2str "0x" showBase36 16
-  let showoctali32   = num2str "0o" showBase36 8
-  let showbinaryi32  = num2str "0b" showBase36 2
+  let showdecimali32 (num : testdata i32) = num2str ""   show_base36 10 <| get num
+  let showhexi32     (num : testdata i32) = num2str "0x" show_base36 16 <| get num
+  let showoctali32   (num : testdata i32) = num2str "0o" show_base36 8  <| get num
+  let showbinaryi32  (num : testdata i32) = num2str "0b" show_base36 2  <| get num
 
-  let separatewith 'elm (separator : []u8) (stringify : elm -> []u8) (arr : []elm) : []u8 =
+  let separatewith 'elm (separator : []u8) (stringify : testdata elm -> []u8) (testdata_arr : testdata ([]elm)) : []u8 =
+    let arr = map testdata <| get testdata_arr in
     if length arr == 0 then ""
     else loop str = stringify (head arr)
          for elm in drop 1 arr
          do str ++ separator ++ stringify elm
 
---let separatewith separator stringify arr : []u8 =
---  loop str = "" for elm in arr do str ++ separator ++ stringify elm
-
-  let separatewith2 'elm (sep0 : []u8) (sep1 : []u8) (interval : i32) stringify (arr : []elm) : []u8 =
-    loop str = ""
-    for i < length arr
-    do str ++ if i % interval == 0 then sep1 else sep0 ++ stringify (arr[i])
-
   let surroundwith prefix postfix str = prefix ++ str ++ postfix
 
-  let showCollection prefix separator postfix stringify strs =
+  let show_collection prefix separator postfix stringify strs =
     surroundwith prefix postfix <| separatewith separator stringify strs
 
-  let showtuple 'elm1 'elm2 (show1 : elm1 -> []u8) (show2 : elm2 -> []u8) ((x,y) : (elm1,elm2)) : []u8 =
-    "(" ++ show1 x ++ ", " ++ show2 y ++ ")"
+  let showtuple 'elm1 'elm2
+                (show1 : testdata elm1 -> []u8)
+                (show2 : testdata elm2 -> []u8)
+                (tup : testdata (elm1,elm2))
+                : []u8 =
+    let (x,y) = get tup
+    in "(" ++ show1 (testdata x) ++ ", " ++ show2 (testdata y) ++ ")"
 
   let show2tuple = showtuple
 
   let show3tuple 'elm1 'elm2 'elm3
-               (show1 : elm1 -> []u8)
-               (show2 : elm2 -> []u8)
-               (show3 : elm3 -> []u8)
-               ((x,y,z) : (elm1,elm2,elm3))
+               (show1 : testdata elm1 -> []u8)
+               (show2 : testdata elm2 -> []u8)
+               (show3 : testdata elm3 -> []u8)
+               (tup : testdata (elm1,elm2,elm3))
                : []u8 =
-    "(" ++ show1 x ++ ", " ++ show2 y ++ show3 z ++ ")"
+    let (x,y,z) = get tup
+    in "(" ++ show1 (testdata x) ++ ", "
+           ++ show2 (testdata y) ++ ", "
+           ++ show3 (testdata z) ++ ")"
 
   let show4tuple 'elm1 'elm2 'elm3 'elm4
-               (show1 : elm1 -> []u8)
-               (show2 : elm2 -> []u8)
-               (show3 : elm3 -> []u8)
-               (show4 : elm4 -> []u8)
-               ((x,y,z,a) : (elm1,elm2,elm3,elm4))
+               (show1 : testdata elm1 -> []u8)
+               (show2 : testdata elm2 -> []u8)
+               (show3 : testdata elm3 -> []u8)
+               (show4 : testdata elm4 -> []u8)
+               (tup : testdata (elm1,elm2,elm3,elm4))
                : []u8 =
-    "(" ++ show1 x ++ ", " ++ show2 y ++ show3 z ++ show4 a ++ ")"
+  let (x,y,z,a) = get tup
+  in "(" ++ show1 (testdata x) ++ ", "
+         ++ show2 (testdata y) ++ ", "
+         ++ show3 (testdata z) ++ ", "
+         ++ show4 (testdata a) ++ ")"
 
---let showtuple str1 str2 =
---  "(" ++ str1 ++ ", " ++ str2 ++ ")"
---let show2tuple  = showtuple
---let show3tuple str1 str2 str3 =
---  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ")"
---let show4tuple str1 str2 str3 str4 =
---  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ", " ++ str4 ++ ")"
---let show5tuple str1 str2 str3 str4 str5 =
---  "(" ++ str1 ++ ", " ++ str2 ++ ", " ++ str3 ++ ", " ++ str4 ++ ", " ++ str5 ++ ")"
 
-  let showArray stringify arr : []u8 =
-    showCollection "[" ", " "]" stringify arr
+  let show_array 't (stringify : testdata t -> []u8) (arr : testdata ([]t)) : []u8 =
+    show_collection "[" ", " "]" stringify arr
 
---let showArray2d stringify strs : []u8 = separatewith2 "," "], ["
-
-  let showArray2d stringify arr : []u8 =
-  let inner = showArray stringify
-  let outer = showArray inner
+  let show_array2d 't (stringify : testdata t -> []u8) (arr : testdata ([][]t)) : []u8 =
+  let inner = show_array stringify
+  let outer = show_array inner
   in outer arr
 
-  let showArray3d stringify arr : []u8 =
-  let inner  = showArray stringify
-  let middle = showArray inner
-  let outer  = showArray middle
+  let show_array3d 't (stringify : testdata t -> []u8) (arr : testdata ([][][]t)) : []u8 =
+  let inner  = show_array2d stringify
+  --let middle = show_array inner
+  let outer  = show_array inner --middle
   in outer arr
 
-let showArray4d stringify arr : []u8 =
-  let a = showArray stringify
-  let b = showArray a
-  let c = showArray b
-  let d = showArray c
-  in  d arr
+let show_array4d 't (stringify : testdata t -> []u8) (arr : testdata ([][][][]t)) : []u8 =
+  let inner = show_array3d stringify
+  let outer = show_array inner
+  in  outer arr
 
-let showArray5d stringify arr : []u8 =
-  let a = showArray stringify
-  let b = showArray a
-  let c = showArray b
-  let d = showArray c
-  let e = showArray d
-  in  e arr
+let show_array5d 't (stringify : testdata t -> []u8) (arr : testdata ([][][][][]t)) : []u8 =
+  let inner = show_array4d stringify
+  let outer = show_array inner
+  in  outer arr
 
 let squarebracket n = "[" ++ showdecimali32 n ++ "]"
 let show_sizes_1d 'elm [n]
-            (_ : [n]elm)
+            (_ : testdata ([n]elm))
             : []u8 =
-  squarebracket n
+  squarebracket (testdata n)
 
 let show_sizes_2d 'elm [n] [m]
-            (_ : [n][m]elm)
+            (_ : testdata([n][m]elm))
             : []u8 =
-  squarebracket n ++ squarebracket m
+  squarebracket (testdata n) ++ squarebracket (testdata m)
 
 let show_sizes_3d 'elm [a] [b] [c]
-            (_ : [a][b][c]elm)
+            (_ : testdata ([a][b][c]elm))
             : []u8 =
-  squarebracket a ++ squarebracket b ++ squarebracket c
+  squarebracket (testdata a)
+                ++ squarebracket (testdata b)
+                ++ squarebracket (testdata c)
 
 let show_sizes_4d 'elm [a] [b] [c] [d]
-            (_ : [a][b][c][d]elm)
+            (_ : testdata ([a][b][c][d]elm))
             : []u8 =
-  squarebracket a ++ squarebracket b ++ squarebracket c ++ squarebracket d
+  squarebracket (testdata a)
+                ++ squarebracket (testdata b)
+                ++ squarebracket (testdata c)
+                ++ squarebracket (testdata d)
 
 let show_sizes_5d 'elm [a] [b] [c] [d] [e]
-            (_ : [a][b][c][d][e]elm)
+            (_ : testdata ([a][b][c][d][e]elm))
             : []u8 =
-  squarebracket a ++ squarebracket b ++ squarebracket c ++ squarebracket d ++ squarebracket e
+  squarebracket (testdata a)
+                ++ squarebracket (testdata b)
+                ++ squarebracket (testdata c)
+                ++ squarebracket (testdata d)
+                ++ squarebracket (testdata e)
+
+let show_array4d_crash stringify arr : []u8 =
+  let inner = show_array3d stringify
+  let outer = show_array inner
+  in  outer <| get arr
 }
+
+
+
