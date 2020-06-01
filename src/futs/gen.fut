@@ -115,7 +115,7 @@ module Gen = {
                  ((freq3,gen3) : (i32, gen elm))
                  ((freq4,gen4) : (i32, gen elm))
                  : gen elm =
-    frequencyof2 (freq0 + freq1, frequencyof2 (freq0,gen0) (freq1,gen1))
+    frequencyof2 (freq0 + freq1,         frequencyof2 (freq0,gen0) (freq1,gen1))
                  (freq2 + freq3 + freq4, frequencyof3 (freq2,gen2) (freq3,gen3) (freq4,gen4))
 
   let oneof5 'elm
@@ -189,12 +189,12 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
 
   let arbitraryu8  : gen u8  =
     sized (\n ->
-             let n' = u8.i32 <| i32.max n <| i32.u8 u8.highest
+             let n' = u8.i32 <| i32.min n <| i32.u8 u8.highest
              in choose_u8 (0, n'))
 
   let arbitraryu16  : gen u16  =
     sized (\n ->
-             let n' = u16.i32 <| i32.max n <| i32.u16 u16.highest
+             let n' = u16.i32 <| i32.min n <| i32.u16 u16.highest
              in choose_u16 (0, n'))
 
   let arbitraryu32  : gen u32  =
