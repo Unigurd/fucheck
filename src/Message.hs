@@ -3,6 +3,8 @@ module Message (crashMessage, formatMessages) where
 import Data.List (foldl')
 import FutInterface (CInt)
 
+-- make obsolete with new formatting
+
 spaces = ' ':spaces
 
 indent n str =

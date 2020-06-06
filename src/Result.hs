@@ -37,9 +37,3 @@ data Result =
     , errorStage     :: Stage
     , resultSeed     :: CInt
     }
-
---data SingleResult =
---    SingleSuccess (Maybe String) -- The label
---  | SingleFailure
---  | SingleGaveUp
---  | SingleException Stage

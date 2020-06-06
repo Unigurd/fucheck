@@ -109,26 +109,30 @@ main = do
           exitFailure
         Right args -> return args
 
-  -- preprocessing
+  -- read test program
   let filename = file args
-
   fileText <- readFile $ filename
   let alltests = findTests fileText
   let tests = filterTests (whichTests args) alltests
 
+  -- Filter valid from invalid tests
   let (goodtests,badtests) = filtersplit usableTest tests
 
+  -- create directory for tmp files
   letThereBeDir tmpDir
 
+  -- preprocess
   let alteredprogram =
         unlines [ fixEntries goodtests fileText
                 , addStateGetters
                 ]
   tmpFutFile <- uniqueFile filename
   writeFile tmpFutFile alteredprogram
+
+  -- Quit if only meant to write test program to file
   if action args == SaveFile then exitSuccess else return ()
 
-  -- compilation
+  -- Check whether futhark and gcc is installed
   (whichFutharkExitCode, _, _) <-
     TP.readProcess $ TP.proc "which" ["futhark"]
   exitOnCompilationError whichFutharkExitCode $ fromString "futhark does not seem to be installed"
@@ -137,24 +141,31 @@ main = do
     TP.readProcess $ TP.proc "which" ["gcc"]
   exitOnCompilationError whichGCCExitCode $ fromString "gcc does not seem to be installed"
 
+  -- compilation futhark
   (futExitCode, futOut, futErr) <-
-    TP.readProcess $ TP.proc "futhark" $ futArgs args tmpFutFile
+    TP.readProcess $ TP.proc "futhark" $ futArgs args tmpFutFile tmpFile
   removeFile tmpFutFile
   exitOnCompilationError futExitCode futErr
 
+  -- report bad tests
   snitchOn badtests
 
+  -- compile c
   (gccExitCode, gccOut, gccErr) <-
-    TP.readProcess $ TP.proc "gcc" $ gccArgs args
+    TP.readProcess $ TP.proc "gcc" $ gccArgs args tmpFile
   exitOnCompilationError gccExitCode futErr
 
+  -- Last prep
   dl <- DL.dlopen (tmpFile ++ ".so") [DL.RTLD_NOW] -- Read up on flags
-
   cfg <- newFutConfig dl
   ctx <- newFutContext dl cfg
 
-  states <- sequence $ map (mkDefaultState dl ctx) goodtests
+  -- Prepare states
+  states <- sequence $ mkDefaultState dl ctx <$> goodtests
+  -- execute tests
   sequence_ $ map ((putStrLn . result2str) <=< fucheck) states
+
+  -- cleanup
   freeFutContext dl ctx
   newFutFreeConfig dl cfg
   DL.dlclose dl

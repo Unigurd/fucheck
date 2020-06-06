@@ -8,7 +8,7 @@ module State ( State(..)
              ) where
 
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
-import System.Random (randomIO, StdGen, getStdGen, next, RandomGen)
+import System.Random (randomIO, StdGen, newStdGen, next, RandomGen)
 import qualified System.Posix.DynamicLinker as DL
 import qualified Data.Map.Strict as M
 
@@ -16,6 +16,7 @@ import qualified ParseFut as PF
 import qualified FutInterface as FI
 import FutInterface (CInt, Ptr, FutharkTestData, Futhark_Context, Stage(..))
 
+-- State maintained during testing of a single test
 data State = MkState
   { stateTestName             :: String
   , arbitrary                 :: CInt -> CInt -> ExceptT Stage IO (Ptr FutharkTestData)
@@ -33,6 +34,9 @@ data State = MkState
   , computeSize               :: CInt -> CInt
   , randomSeed                :: StdGen
   }
+
+instance Show State where
+  show state = show (size state) ++ " " ++ show (getSeed state)
 
 size :: State -> CInt
 size state = (computeSize state (fromIntegral $ numSuccessTests state))

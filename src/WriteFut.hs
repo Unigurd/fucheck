@@ -2,7 +2,9 @@ module WriteFut (fixEntries, combineFutFuns, addStateGetters) where
 import ParseFut ( FutFunNames(..), ffTestName, isFucheckFun )
 
 
-
+-- TODO change tmp name
+-- a list that contains linebreaks
+-- change to list of tuples where fst tup is whitespace before word and snd tup is word
 data Lada a = Cons a (Lada a) | Break (Lada a) | Nil
 list2lada [] = Nil
 list2lada (e:es) = Cons e $ list2lada es
@@ -19,6 +21,10 @@ lada2str Nil = []
 lada2str (Break es) = '\n':lada2str es
 lada2str (Cons e es) = e ++ " " ++ lada2str es
 
+-- Turn test functions into entries and everything else in let-bindings
+-- Turns any let-binding share a name with a test function into an entry,
+-- even those within functions.
+-- Also turns any entry into a let-binding, even if (invalidly) within a function
 fixEntries :: [FutFunNames] -> String -> String
 fixEntries tests programtext = lada2str $ fixer $ str2lada  programtext
   where
@@ -34,13 +40,13 @@ fixEntries tests programtext = lada2str $ fixer $ str2lada  programtext
 
     tests `contains` testname = any (isFucheckFun testname) tests
 
-
     next Nil          = Nothing
     next (Break rest) = next rest
     next (Cons e _)   = Just e
 
-futStateDef = "{ maxtests : maxtests , maxsize  : maxsize , maxdiscardedratio : maxdiscardedratio }"
 
+-- Combine futhark functions for type checking
+-- doesn't work for some arrays
 combineFutFuns :: FutFunNames -> String
 combineFutFuns funs = result
   where
@@ -57,6 +63,10 @@ combineFutFuns funs = result
     --state_comb  = typecheck stateFound "state" futStateDef
     result = unlines [prop_comb, show_comb, cond_comb, labels_comb] --, state_comb]
 
+-- definition of a futhark state
+futStateDef = "{ maxtests : maxtests , maxsize  : maxsize , maxdiscardedratio : maxdiscardedratio }"
+
+-- Add state getters. duh.
 addStateGetters =
   unlines [ "-- For accessing the state of each test"
           , "entry maxtests (state : " ++ futStateDef ++ ") : maxtests = state.maxtests"

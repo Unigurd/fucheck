@@ -4,7 +4,7 @@ module Tests (fucheck, result2str) where
 import Data.List (foldl', sortOn)
 import Data.Either (either)
 import Control.Monad (join)
-import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT, throwE, except)
+import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT, throwE, except, mapExceptT)
 import qualified Data.Map.Strict as MS
 
 import qualified Result  as R
@@ -16,11 +16,13 @@ import FutInterface (CInt, Ptr, FutharkTestData)
 either2maybe (Right r) = Just r
 either2maybe (Left _)  = Nothing
 
+-- apply a Maybe function
 f *< a = f <*> pure a
 
 
+-- Tries to generate some test data (Just Right) until an exception occurs (Just Left)
+-- or the max number of tries has been reached (Nothing)
 -- change name from 'run'
--- Nothing if no inputs passed the condition. Just Left if something crashed
 runGen :: S.State -> IO (S.State, Maybe (Either Stage (Ptr FutharkTestData)))
 --runGen :: S.State -> (S.State, ExceptT Stage IO (Maybe (Ptr futharkTestData)))
 runGen state
@@ -63,6 +65,7 @@ runGen state
           onLeft f (Left l) = Left $ f l
           onLeft _ rightval  = rightval
 
+-- reports a futhark exception
 foundException state exitcode string =
   R.Exception { R.resultTestName = S.stateTestName state
               , R.shownInput     = string
@@ -70,21 +73,29 @@ foundException state exitcode string =
               , R.resultSeed     = S.getSeed state
               }
 
+-- Runs a show function
 shownInput :: S.State -> ExceptT Stage IO (Maybe String)
 shownInput state =
   case S.shower state of
     Nothing -> return Nothing
     Just s -> Just <$> (s =<< S.runArbitrary state)
 
+-- Ignores if show throws exceptions.
+-- used when there already was an exception within futhark
 ignoreShowException = join . either2maybe
 
+mapLeft f e = ExceptT $ fmap (\x -> case x of Left a -> Left (f a) ; Right a -> Right a) $ runExceptT e
+
+-- main loop
 fucheck :: S.State -> IO R.Result
 fucheck state = do
   finalResult <- runExceptT $ fucheckRec state
   case finalResult of
     Right result -> return result
     Left  errVal -> do
+      --putStrLn $ show finalState
       s <- runExceptT $ shownInput state
+      --putStrLn "waddup"
       return $ foundException state errVal $ ignoreShowException s
 
   where
@@ -133,13 +144,16 @@ fucheck state = do
                         alterFun (Just n)  = Just $ n + 1
 
                 else do
+                --ExceptT $ return <$> (utStrLn $ show state) --"doodidadada"
                 s <- shownInput state
+                -- ExceptT $ return <$> putStrLn "hejsa"
                 return $ R.Failure { R.resultTestName = S.stateTestName state
                                    , R.shownInput     = s
                                    , R.resultSeed     = S.getSeed state
                                    }
 
 
+-- turns the result into a string to print
 result2str :: R.Result -> String
 result2str (R.Success name numTests Nothing) =
   "Property " ++ name ++ " holds after " ++ show numTests ++ " tests"

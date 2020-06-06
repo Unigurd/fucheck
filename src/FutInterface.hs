@@ -27,13 +27,14 @@ import Foreign.Marshal.Array (allocaArray, peekArray)
 import qualified System.Posix.DynamicLinker as DL
 import Codec.Binary.UTF8.String (decode)
 
+-- For reporting where errors occur
 data Stage =
     Arb   {exitCode :: CInt}
   | Prop  {exitCode :: CInt}
   | Cond  {exitCode :: CInt}
   | Show  {exitCode :: CInt}
   | Label {exitCode :: CInt}
-  | GetState {exitCode :: CInt}
+  | GetState {exitCode :: CInt} deriving Show
 
 stage2str (Arb _)   = "arbitrary"
 stage2str (Prop _)  = "property"
@@ -48,6 +49,8 @@ data FutState
 
 data Futhark_u8_1d
 data FutharkTestData
+
+-- Shorthands for various C function types
 type ValuesType =  Ptr Futhark_Context
                 -> Ptr Futhark_u8_1d -- Old fut array
                 -> Ptr Word8         -- New array
@@ -73,6 +76,7 @@ type StateType = Ptr Futhark_Context
               -> Ptr (Ptr FutState)
               -> IO CInt
 
+-- Create and free config and context
 foreign import ccall "dynamic"
   mkConfig :: FunPtr (IO (Ptr Futhark_Context_Config)) -> IO (Ptr Futhark_Context_Config)
 
@@ -101,6 +105,7 @@ freeFutContext dl ctx = do
   f <- DL.dlsym dl "futhark_context_free"
   mkContextFree f ctx
 
+-- Get fucheck state
 foreign import ccall "dynamic"
   mkFutState :: FunPtr StateType -> StateType
 getFutState :: DL.DL -> Ptr Futhark_Context -> String -> IO (Ptr FutState)
@@ -111,6 +116,7 @@ getFutState dl ctx name = do
     Right futState -> return futState
     Left exitCode -> error $ "Failed loading " ++ name ++ ".\nFailed with exit code " ++ show exitCode
 
+-- get value of a field of state
 -- make static ?
 foreign import ccall "dynamic"
   mkGetStateField :: FunPtr (Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt)
@@ -125,6 +131,8 @@ futGetStateField dl ctx futState field = do
     Left errVal ->
       error $ "Failed getting " ++ field ++ " with exit code " ++ show (exitCode errVal)
 
+-- Helper functions for marshalling arrays
+-- Get size of array
 foreign import ccall "dynamic"
   mkFutShape :: FunPtr (Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr CInt))
              ->         Ptr Futhark_Context -> Ptr Futhark_u8_1d -> IO (Ptr CInt)
@@ -135,6 +143,7 @@ futShape dl ctx futArr = do
   shapePtr <- mkFutShape f ctx futArr
   peek shapePtr
 
+-- Gets array as string
 foreign import ccall "dynamic"
   mkFutValues :: FunPtr ValuesType -> ValuesType
 mkValues :: DL.DL
@@ -151,6 +160,7 @@ mkValues dl ctx stage valuesPtr futArr = ExceptT $ do
       return $ Right $ decode hsList
     Left errorcode -> return $ Left $ stage errorcode
 
+-- loads arbitrary function
 foreign import ccall "dynamic"
   mkFutArb :: FunPtr ArbitraryType -> ArbitraryType
 
@@ -158,13 +168,14 @@ mkArbitrary dl ctx name = do
   arbPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
   return $ haskify2 (mkFutArb arbPtr) ctx Arb
 
+-- loads property and condition
 foreign import ccall "dynamic"
   mkFutProp :: FunPtr PropertyType -> PropertyType
 mkProperty dl ctx stage name = do
   propPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
   return $ \input -> (0 /=) <$> (haskify (mkFutProp propPtr) ctx stage input)
 
-
+-- Loads show and labels
 foreign import ccall "dynamic"
   mkFutShow :: FunPtr ShowType -> ShowType
 mkShow dl ctx stage name = do
@@ -174,6 +185,7 @@ mkShow dl ctx stage name = do
     u8arr <- haskify (mkFutShow showPtr) ctx stage input
     mkValues dl ctx stage futValues u8arr
 
+-- Helper functions
 haskify0 :: Storable out
         => (Ptr Futhark_Context -> Ptr out -> IO CInt)
         -> Ptr Futhark_Context

@@ -51,11 +51,17 @@ filterMap f = foldr (\elm acc -> case f elm of
                           Just x  -> x:acc
                           Nothing -> acc) []
 
+-- get name of test
 getTestName ["--", "fucheck", name] = Just name
 getTestName _                       = Nothing
 
 mapPerhaps :: (a -> Maybe a) -> [a] -> [a]
-mapPerhaps f l = foldr (\elm acc -> case f elm of ; Nothing -> elm:acc ; Just newElm -> newElm:acc) [] l
+mapPerhaps f l =
+  foldr (\elm acc ->
+           case f elm of
+             Nothing -> elm:acc
+             Just newElm -> newElm:acc
+        ) [] l
 
 funNameMatches (binding:actualName:_) get set ffns
   | binding == "let" || binding == "entry" =
