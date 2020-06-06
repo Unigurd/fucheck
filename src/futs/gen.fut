@@ -63,11 +63,11 @@ module Gen = {
                  ((freq1,gen1) : (i32, gen elm))
                  : gen elm =
     (\size rng ->
-       let rngs = split_rng 2 rng
+       let rngs = split_rng 3 rng
        let totalfreq = freq0 + freq1
        in if rand_i32 (1,totalfreq) rngs[0] <= freq0
           then gen0 size rngs[1]
-          else gen1 size rngs[1])
+          else gen1 size rngs[2])
 
   let oneof2 'elm
            (gen0 : gen elm)
@@ -127,38 +127,11 @@ module Gen = {
            : gen elm =
     frequencyof5 (1,gen0) (1,gen1) (1,gen2) (1,gen3) (1,gen4)
 
+
   let elements 'elm [n] (elms : [n]elm) : gen elm =
     (\_ rng ->
        let i = rand_i32 (0,n-1) rng
        in #testdata elms[i])
-
--- NOT TESTED
--- Finds the rightmost index at which the element is <= the goal
--- in a sorted array.
--- Doesn't handle the case where all elements are > the goal
-let weirdBinarySearch [n] (arr : [n]i32) (goal : i32) : i32 =
-  let (_, result, _) =
-    loop (lower, current, upper) = (0, n/2, n)
-    while lower != current
-    do if arr[current] <= goal
-       then let next = current + ((upper - current)/2)
-            in (current,next,upper)
-       else let next = lower + ((current - lower)/2)
-            in (lower, next, current)
-in result
-
--- NOT TESTED
--- Rename to avoid confusion with frequencyofX?
--- assumes all frequencies are > 0
-let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
-  let (freqs,elms) = unzip choices
-  let freqsums     = scan (+) 0 freqs
-  let total        = freqsums[n-1]
-  in  (\_ rng ->
-         let goal = rand_i32 (1,total) rng
-         let resultindex = weirdBinarySearch freqsums goal
-         in #testdata elms[resultindex])
-
 
 
   let arbitrarybool : gen bool =  choose_bool (false,true)
@@ -267,7 +240,7 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
 
   let arbitrarytuple 'a 'b (arbitrarya : gen a) (arbitraryb : gen b) : gen (a,b) =
     (\n r ->
-       let rngs = minstd_rand.split_rng 2 r
+       let rngs = split_rng 2 r
        let a = arbitrarya n rngs[0]
        let b = arbitraryb n rngs[1]
        in match (a,b)
@@ -281,7 +254,7 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
                       (arbitraryc : gen c)
                       : gen (a,b,c) =
     (\n r ->
-       let rngs = minstd_rand.split_rng 3 r
+       let rngs = split_rng 3 r
        let a = arbitrarya n rngs[0]
        let b = arbitraryb n rngs[1]
        let c = arbitraryc n rngs[2]
@@ -295,7 +268,7 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
                       (arbitraryd : gen d)
                       : gen (a,b,c,d) =
     (\n r ->
-       let rngs = minstd_rand.split_rng 4 r
+       let rngs = split_rng 4 r
        let a = arbitrarya n rngs[0]
        let b = arbitraryb n rngs[1]
        let c = arbitraryc n rngs[2]
@@ -313,7 +286,7 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
                       (arbitrarye : gen e)
                       : gen (a,b,c,d,e) =
     (\n r ->
-       let rngs = minstd_rand.split_rng 5 r
+       let rngs = split_rng 5 r
        let a = arbitrarya n rngs[0]
        let b = arbitraryb n rngs[1]
        let c = arbitraryc n rngs[2]
@@ -335,7 +308,7 @@ let frequency 'elm [n] (choices : [n](i32,elm)) : gen elm =
                  (size : size)
                  : gen ([size]elm) =
     (\maxsize rng ->
-       let rngs = minstd_rand.split_rng size rng
+       let rngs = split_rng size rng
        in #testdata (map (untestdata <-< arbitraryelm maxsize) rngs))
 
   let arbitrary2darr 'elm

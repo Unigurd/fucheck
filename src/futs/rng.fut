@@ -1,17 +1,18 @@
 import "types"
 
 import "lib/github.com/diku-dk/cpprandom/random"
-module dist = uniform_int_distribution i64 minstd_rand
+module r = minstd_rand
+module dist = uniform_int_distribution i64 r
 
 module Rng = {
   open Types
 
- type rng = minstd_rand.rng
+ type rng = r.rng
 
   let snd (_,b) = b
 
-  let rng_from_seed seed = minstd_rand.rng_from_seed [seed]
-  let split_rng n rng = minstd_rand.split_rng n rng
+  let rng_from_seed seed = r.rng_from_seed [seed]
+  let split_rng n rng = r.split_rng n rng
 
   let rand_i64 ((low,high) : (i64,i64)) (rng : rng) : i64 =
     snd <| dist.rand (low, high) rng
@@ -47,8 +48,8 @@ module Rng = {
     bool.i64 <| snd <| dist.rand (i64.bool low, i64.bool high) rng
 
   let getsizes (maxsize : size) (rng : rng) (num : i32) : [num]i32 =
-  let rngs     = minstd_rand.split_rng num rng
-  let sizes    = map (\rng -> rand_i32 (0,maxsize) rng) rngs
-  in sizes
+    let rngs     = r.split_rng num rng
+    let sizes    = map (\rng -> rand_i32 (0,maxsize) rng) rngs
+    in sizes
 
 }
