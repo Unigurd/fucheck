@@ -27,4 +27,6 @@ module Types = {
     match td
     case #testdata elm -> elm
 
+  let map_testdata 'a 'b (f : a -> b) (t : testdata a) : testdata b =
+    testdata <| f <| untestdata t
 }

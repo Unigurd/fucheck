@@ -2,13 +2,11 @@ import "types"
 module Show = {
   open Types
 
-  type sign = #positive | #negative
-
 -- Greatest lower power of exp
-let glp (factor : i32) (n :i32) =
+let glp (factor : u64) (n : u64) =
   loop i = 1 while (factor ** i) <= n do i + 1
 
-  let show_base36 digit : u8 =
+  let show_base36 (digit : u64) : u8 =
     match digit
     case 0  -> '0'
     case 1  -> '1'
@@ -49,32 +47,73 @@ let glp (factor : i32) (n :i32) =
     case _  -> '_'
 
 
-
-  let show_sign (sign : sign) = match sign
-                               case #positive -> ""
-                               case #negative -> "-"
-
-  let digify base n : (sign, []i32) =
-    (if n < 0 then #negative else #positive,
-  let n = i32.abs n
+  let digify (base : u64) (n : u64) : []u64 =
   let digitNr = glp base n
-  let digitArr = reverse <| iota digitNr
+  let digitArr = reverse <| map u64.i32 <| iota <| i32.u64 digitNr
   let (digits, _) =
     loop (digits, remainder) = ([], n)
     for i in digitArr
     do (digits ++ [remainder / (base**i)],remainder % (base**i))
-  in digits)
+  in digits
 
-  let num2str prefix stringify base num =
-  let (sign, digits) = digify base num
-  in show_sign sign ++ prefix ++ (map stringify digits)
+  let i64_str prefix stringify base num =
+  let sign = if num < 0 then "-" else ""
+  let digits = digify base <| u64.i64 <| i64.abs num
+  in sign ++ prefix ++ (map stringify digits)
+
+  let u64_str prefix stringify base num =
+  let digits = digify base num
+  in prefix ++ (map stringify digits)
 
   let showbool b = if get b then "true" else "false"
 
-  let showdecimali32 (num : testdata i32) = num2str ""   show_base36 10 <| get num
-  let showhexi32     (num : testdata i32) = num2str "0x" show_base36 16 <| get num
-  let showoctali32   (num : testdata i32) = num2str "0o" show_base36 8  <| get num
-  let showbinaryi32  (num : testdata i32) = num2str "0b" show_base36 2  <| get num
+  let showi64        (num : testdata i64) = i64_str ""   show_base36 10 <| get num
+  let showdecimali64 (num : testdata i64) = i64_str ""   show_base36 10 <| get num
+  let showhexi64     (num : testdata i64) = i64_str "0x" show_base36 16 <| get num
+  let showoctali64   (num : testdata i64) = i64_str "0o" show_base36 8  <| get num
+  let showbinaryi64  (num : testdata i64) = i64_str "0b" show_base36 2  <| get num
+
+  let showi32        (num : testdata i32) = showi64        <| map_testdata i64.i32 num
+  let showdecimali32 (num : testdata i32) = showdecimali64 <| map_testdata i64.i32 num
+  let showhexi32     (num : testdata i32) = showhexi64     <| map_testdata i64.i32 num
+  let showoctali32   (num : testdata i32) = showoctali64   <| map_testdata i64.i32 num
+  let showbinaryi32  (num : testdata i32) = showbinaryi64  <| map_testdata i64.i32 num
+
+  let showi16        (num : testdata i16) = showi64        <| map_testdata i64.i16 num
+  let showdecimali16 (num : testdata i16) = showdecimali64 <| map_testdata i64.i16 num
+  let showhexi16     (num : testdata i16) = showhexi64     <| map_testdata i64.i16 num
+  let showoctali16   (num : testdata i16) = showoctali64   <| map_testdata i64.i16 num
+  let showbinaryi16  (num : testdata i16) = showbinaryi64  <| map_testdata i64.i16 num
+
+  let showi8         (num : testdata i8) = showi64         <| map_testdata i64.i8 num
+  let showdecimali8  (num : testdata i8) = showdecimali64  <| map_testdata i64.i8 num
+  let showhexi8      (num : testdata i8) = showhexi64      <| map_testdata i64.i8 num
+  let showoctali8    (num : testdata i8) = showoctali64    <| map_testdata i64.i8 num
+  let showbinaryi8   (num : testdata i8) = showbinaryi64   <| map_testdata i64.i8 num
+
+  let showu64        (num : testdata u64) = u64_str ""   show_base36 10 <| get num
+  let showdecimalu64 (num : testdata u64) = u64_str ""   show_base36 10 <| get num
+  let showhexu64     (num : testdata u64) = u64_str "0x" show_base36 16 <| get num
+  let showoctalu64   (num : testdata u64) = u64_str "0o" show_base36 8  <| get num
+  let showbinaryu64  (num : testdata u64) = u64_str "0b" show_base36 2  <| get num
+
+  let showu32        (num : testdata u32) = showu64        <| map_testdata u64.u32 num
+  let showdecimalu32 (num : testdata u32) = showdecimalu64 <| map_testdata u64.u32 num
+  let showhexu32     (num : testdata u32) = showhexu64     <| map_testdata u64.u32 num
+  let showoctalu32   (num : testdata u32) = showoctalu64   <| map_testdata u64.u32 num
+  let showbinaryu32  (num : testdata u32) = showbinaryu64  <| map_testdata u64.u32 num
+
+  let showu16        (num : testdata u16) = showu64        <| map_testdata u64.u16 num
+  let showdecimalu16 (num : testdata u16) = showdecimalu64 <| map_testdata u64.u16 num
+  let showhexu16     (num : testdata u16) = showhexu64     <| map_testdata u64.u16 num
+  let showoctalu16   (num : testdata u16) = showoctalu64   <| map_testdata u64.u16 num
+  let showbinaryu16  (num : testdata u16) = showbinaryu64  <| map_testdata u64.u16 num
+
+  let showu8         (num : testdata u8) = showu64         <| map_testdata u64.u8 num
+  let showdecimalu8  (num : testdata u8) = showdecimalu64  <| map_testdata u64.u8 num
+  let showhexu8      (num : testdata u8) = showhexu64      <| map_testdata u64.u8 num
+  let showoctalu8    (num : testdata u8) = showoctalu64    <| map_testdata u64.u8 num
+  let showbinaryu8   (num : testdata u8) = showbinaryu64   <| map_testdata u64.u8 num
 
   let separatewith 'elm (separator : []u8) (stringify : testdata elm -> []u8) (testdata_arr : testdata ([]elm)) : []u8 =
     let arr = map testdata <| get testdata_arr in
