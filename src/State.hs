@@ -54,15 +54,15 @@ runArbitrary state =
 
 mkDefaultState :: DL.DL -> Ptr Futhark_Context -> PF.FutFunNames -> IO State
 mkDefaultState dl ctx testNames = do
-  gen <- getStdGen
-  dynArb  <- FI.mkArbitrary dl ctx $ PF.arbName testNames
-  dynProp <- FI.mkProperty  dl ctx Prop $ PF.propName testNames
-  dynCond <- if PF.condFound testNames
-             then Just <$> FI.mkProperty dl ctx Cond (PF.condName testNames)
-             else return Nothing
-  dynShow <- if PF.showFound testNames
-             then Just <$> FI.mkShow dl ctx Show (PF.showName testNames)
-             else return Nothing
+  gen      <- newStdGen
+  dynArb   <- FI.mkArbitrary dl ctx $ PF.arbName testNames
+  dynProp  <- FI.mkProperty  dl ctx Prop $ PF.propName testNames
+  dynCond  <- if PF.condFound testNames
+              then Just <$> FI.mkProperty dl ctx Cond (PF.condName testNames)
+              else return Nothing
+  dynShow  <- if PF.showFound testNames
+              then Just <$> FI.mkShow dl ctx Show (PF.showName testNames)
+              else return Nothing
   dynLabel <- if PF.labelFound testNames then
                 Just <$> FI.mkShow dl ctx Label (PF.labelName testNames)
               else return Nothing
