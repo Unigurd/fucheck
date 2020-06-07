@@ -247,11 +247,11 @@ let show_show_3d_arr (input : testdata ([][][]i32)) = show_array3d showdecimali3
    let sizes = getsizes size rngs[0] 5
    let my_arb = (arbitrary4darr arbitraryi32 sizes[0] sizes[1] sizes[2] sizes[3])
    in my_arb size rngs[1]
- 
+
  let prop_show_4d_arr (input : testdata ([][][][]i32)) =
    match input
    case #testdata arr -> length arr <= 2
- 
+
  let show_show_4d_arr (input : testdata ([][][][]i32)) = show_array4d showdecimali32 input
 
 -- fucheck show_5d_arr
@@ -266,6 +266,3 @@ let prop_show_5d_arr (input : testdata ([][][][][]i32)) =
   case #testdata arr -> length arr <= 1
 
 let show_show_5d_arr = show_array5d showdecimali32
-
-
-

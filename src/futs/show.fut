@@ -172,7 +172,6 @@ let glp (factor : u64) (n : u64) =
 
   let show_array3d 't (stringify : testdata t -> []u8) (arr : testdata ([][][]t)) : []u8 =
   let inner  = show_array2d stringify
-  --let middle = show_array inner
   let outer  = show_array inner --middle
   in outer arr
 
