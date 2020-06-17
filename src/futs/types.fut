@@ -1,6 +1,5 @@
 module Types = {
 
-  type testdata 't       = #testdata t
   type size              = i32
   type maxtests          = i32
   type maxsize           = size
@@ -16,17 +15,4 @@ module Types = {
     state.maxsize
   entry maxdiscardedratio (state : state) : maxdiscardedratio =
     state.maxdiscardedratio
-
-
-  let testdata 'n (n : n) : testdata n = #testdata n
-  let untestdata 'elm (td : testdata elm) : elm =
-    match td
-    case #testdata elm -> elm
-
-  let get 'elm (td : testdata elm) : elm =
-    match td
-    case #testdata elm -> elm
-
-  let map_testdata 'a 'b (f : a -> b) (t : testdata a) : testdata b =
-    testdata <| f <| untestdata t
 }
