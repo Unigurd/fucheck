@@ -27,6 +27,8 @@ import Foreign.Marshal.Array (allocaArray, peekArray)
 import qualified System.Posix.DynamicLinker as DL
 import Codec.Binary.UTF8.String (decode)
 
+(<.>) f g n = f <$> g n
+
 -- For reporting where errors occur
 data Stage =
     Arb   {exitCode :: CInt}
@@ -63,14 +65,17 @@ type ArbitraryType =  Ptr Futhark_Context
                    -> IO CInt
 
 type PropertyType =  Ptr Futhark_Context
-                  -> Ptr CBool
-                  -> Ptr FutharkTestData
-                  -> IO CInt
+                    -> Ptr CBool
+                    -> CInt
+                    -> CInt
+                    -> IO CInt
 
 type ShowType =  Ptr Futhark_Context
-              -> Ptr (Ptr Futhark_u8_1d)
-              -> Ptr FutharkTestData
-              -> IO CInt
+                -> Ptr (Ptr Futhark_u8_1d)
+                -> CInt
+                -> CInt
+                -> IO CInt
+
 
 type StateType = Ptr Futhark_Context
               -> Ptr (Ptr FutState)
@@ -110,7 +115,7 @@ foreign import ccall "dynamic"
   mkFutState :: FunPtr StateType -> StateType
 getFutState :: DL.DL -> Ptr Futhark_Context -> String -> IO (Ptr FutState)
 getFutState dl ctx name = do
-  futStatePtr <- DL.dlsym dl ("futhark_entry_" ++ name)
+  futStatePtr <- DL.dlsym dl ("futhark_entry_entry_" ++ name)
   eitherFutState <- runExceptT $ haskify0 (mkFutState futStatePtr) ctx
   case eitherFutState of
     Right futState -> return futState
@@ -165,24 +170,24 @@ foreign import ccall "dynamic"
   mkFutArb :: FunPtr ArbitraryType -> ArbitraryType
 
 mkArbitrary dl ctx name = do
-  arbPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
+  arbPtr <- DL.dlsym dl ("futhark_entry_entry" ++ name)
   return $ haskify2 (mkFutArb arbPtr) ctx Arb
 
 -- loads property and condition
 foreign import ccall "dynamic"
   mkFutProp :: FunPtr PropertyType -> PropertyType
 mkProperty dl ctx stage name = do
-  propPtr <- DL.dlsym dl ("futhark_entry_" ++ name)
-  return $ \input -> (0 /=) <$> (haskify (mkFutProp propPtr) ctx stage input)
+  propPtr <- DL.dlsym dl ("futhark_entry_entry_" ++ name)
+  return $ \input0 input1 -> (0 /=) <$> (haskify2 (mkFutProp propPtr) ctx stage input0 input1)
 
 -- Loads show and labels
 foreign import ccall "dynamic"
   mkFutShow :: FunPtr ShowType -> ShowType
 mkShow dl ctx stage name = do
-  showPtr   <- DL.dlsym dl ("futhark_entry_" ++ name)
+  showPtr   <- DL.dlsym dl ("futhark_entry_entry_" ++ name)
   futValues <- DL.dlsym dl "futhark_values_u8_1d"
-  return $ \input -> do
-    u8arr <- haskify (mkFutShow showPtr) ctx stage input
+  return $ \input0 input1 -> do
+    u8arr <- haskify2 (mkFutShow showPtr) ctx stage input0 input1
     mkValues dl ctx stage futValues u8arr
 
 -- Helper functions

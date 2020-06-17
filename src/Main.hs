@@ -43,6 +43,7 @@ import ParseFut ( FutFunNames
 import WriteFut ( fixEntries
                 , combineFutFuns
                 , addStateGetters
+                , entryTest
                 )
 
 import FutInterface ( newFutConfig
@@ -122,9 +123,11 @@ main = do
   letThereBeDir tmpDir
 
   -- preprocess
+  let entryText = unlines $ map entryTest goodtests
   let alteredprogram =
         unlines [ fixEntries goodtests fileText
                 , addStateGetters
+                , entryText
                 ]
   tmpFutFile <- uniqueFile filename
   writeFile tmpFutFile alteredprogram
@@ -156,7 +159,7 @@ main = do
   exitOnCompilationError gccExitCode futErr
 
   -- Last prep
-  dl <- DL.dlopen (tmpFile ++ ".so") [DL.RTLD_NOW] -- Read up on flags
+  dl  <- DL.dlopen (tmpFile ++ ".so") [DL.RTLD_NOW] -- Read up on flags
   cfg <- newFutConfig dl
   ctx <- newFutContext dl cfg
 

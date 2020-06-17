@@ -1,4 +1,5 @@
-module ParseFut ( FutFunNames
+{-# LANGUAGE ScopedTypeVariables #-}
+module ParseFut ( FutFunNames(..)
                 , findTests
                 , arbName
                 , propName
@@ -6,13 +7,6 @@ module ParseFut ( FutFunNames
                 , showName
                 , stateName
                 , labelName
-                , ffTestName
-                , arbFound
-                , propFound
-                , stateFound
-                , condFound
-                , showFound
-                , labelFound
                 , only
                 , without
                 , usableTest
@@ -23,10 +17,12 @@ module ParseFut ( FutFunNames
 import Debug.Trace (trace)
 import Data.List (foldl')
 import Control.Applicative ((<|>))
+import Text.Read (readMaybe)
 
 -- internal type for parsing tests in a futhark file
 data FutFunNames = FutFunNames
   { ffTestName :: String
+  , numSizes   :: Integer
   , arbFound   :: Bool
   , propFound  :: Bool
   , condFound  :: Bool
@@ -35,8 +31,9 @@ data FutFunNames = FutFunNames
   , labelFound :: Bool
   }
 
-newFutFunNames name = FutFunNames
+newFutFunNames name n = FutFunNames
   { ffTestName = name
+  , numSizes   = n
   , arbFound   = False
   , propFound  = False
   , condFound  = False
@@ -52,8 +49,14 @@ filterMap f = foldr (\elm acc -> case f elm of
                           Nothing -> acc) []
 
 -- get name of test
-getTestName ["--", "fucheck", name] = Just name
+getTestName ("--":"fucheck":name:_) = Just name
 getTestName _                       = Nothing
+
+getNumSizes ("--":"fucheck":_:num:_) =
+  case (readMaybe num, (0<) <$> readMaybe num) of
+    (Just n, Just True) -> Just $ n + 1
+    _ -> Nothing -- trace ((show $ (readMaybe num :: Maybe Integer)) ++ " " ++ num) Nothing
+getNumSizes _ = Nothing
 
 mapPerhaps :: (a -> Maybe a) -> [a] -> [a]
 mapPerhaps f l =
@@ -71,6 +74,7 @@ funNameMatches (binding:actualName:_) get set ffns
   | otherwise = Nothing
 funNameMatches _ _ _ _ = Nothing
 
+
 anyFunNameMatches :: [String] -> FutFunNames -> Maybe FutFunNames
 anyFunNameMatches line ffns =
       matchesLine arbName   (\f -> f {arbFound   = True}) ffns
@@ -83,9 +87,10 @@ anyFunNameMatches line ffns =
 
 
 checkLine foundFuns line =
-  case getTestName line of
-    Just newName -> newFutFunNames newName : foundFuns
-    Nothing      -> mapPerhaps (anyFunNameMatches line) foundFuns
+  case (getTestName line, getNumSizes line) of
+    (Just newName, Just n)  -> newFutFunNames newName n : foundFuns
+    (Just newName, Nothing) -> newFutFunNames newName 1 : foundFuns
+    (Nothing, _)            -> mapPerhaps (anyFunNameMatches line) foundFuns
 
 only    names foundFuns = [fun | fun <- foundFuns, name <- names, ffTestName fun == name]
 without names foundFuns = [fun | fun <- foundFuns, all (/= ffTestName fun) names]

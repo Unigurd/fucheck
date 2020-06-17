@@ -4,7 +4,10 @@ module State ( State(..)
              , getSeed
              , nextGen
              , nextState
-             , runArbitrary
+             , runProp
+             , runShow
+             , runCond
+             , runLabels
              ) where
 
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
@@ -19,11 +22,10 @@ import FutInterface (CInt, Ptr, FutharkTestData, Futhark_Context, Stage(..))
 -- State maintained during testing of a single test
 data State = MkState
   { stateTestName             :: String
-  , arbitrary                 :: CInt -> CInt -> ExceptT Stage IO (Ptr FutharkTestData)
-  , property                  :: Ptr FutharkTestData -> ExceptT Stage IO Bool
-  , condition                 :: Maybe (Ptr FutharkTestData -> ExceptT Stage IO Bool)
-  , shower                    :: Maybe (Ptr FutharkTestData -> ExceptT Stage IO String)
-  , labeler                   :: Maybe (Ptr FutharkTestData -> ExceptT Stage IO String)
+  , property                  :: CInt -> CInt -> ExceptT Stage IO Bool
+  , condition                 :: Maybe (CInt -> CInt -> ExceptT Stage IO Bool)
+  , shower                    :: Maybe (CInt -> CInt -> ExceptT Stage IO String)
+  , labeler                   :: Maybe (CInt -> CInt -> ExceptT Stage IO String)
   , labels                    :: Maybe (M.Map String CInt)
   , numSuccessTests           :: CInt
   , maxSuccessTests           :: CInt
@@ -53,13 +55,28 @@ nextState state = (cInt, newState)
     cInt         = toEnum int
     newState     = state {randomSeed = newGen}
 
-runArbitrary state =
-  arbitrary state (size state) (getSeed state)
+runProp state =
+  property state (size state) (getSeed state)
+
+runShow :: State -> IO (Maybe (Either Stage String))
+runShow state =
+  case shower state of
+    Nothing -> return Nothing
+    Just s  -> Just <$> runExceptT (s (size state) (getSeed state))
+
+runCond state =
+  case condition state of
+    Nothing -> return Nothing
+    Just c  -> Just <$> runExceptT (c (size state) (getSeed state))
+
+runLabels state =
+  case labeler state of
+    Nothing -> return Nothing
+    Just l  -> Just <$> runExceptT (l (size state) (getSeed state))
 
 mkDefaultState :: DL.DL -> Ptr Futhark_Context -> PF.FutFunNames -> IO State
 mkDefaultState dl ctx testNames = do
   gen      <- newStdGen
-  dynArb   <- FI.mkArbitrary dl ctx $ PF.arbName testNames
   dynProp  <- FI.mkProperty  dl ctx Prop $ PF.propName testNames
   dynCond  <- if PF.condFound testNames
               then Just <$> FI.mkProperty dl ctx Cond (PF.condName testNames)
@@ -81,7 +98,6 @@ mkDefaultState dl ctx testNames = do
     else return (100, 100, 100) -- move defaults to fut ?
   return $ MkState
     { stateTestName             = PF.ffTestName testNames
-    , arbitrary                 = dynArb
     , property                  = dynProp
     , condition                 = dynCond
     , shower                    = dynShow

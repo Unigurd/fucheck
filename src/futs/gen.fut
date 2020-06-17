@@ -3,7 +3,7 @@ import "rng"
 module Gen = {
   open Rng
 
-  type^ gen 'a           = size -> rng -> testdata a
+  type^ gen 'a = size -> rng -> testdata a
 
 
 
@@ -304,9 +304,9 @@ module Gen = {
   let five  arb = arbitrary5tuple arb arb arb arb arb
 
   let arbitraryarr 'elm
-                 (arbitraryelm : gen elm)
-                 (size : size)
-                 : gen ([size]elm) =
+                   (arbitraryelm : gen elm)
+                   (size : size)
+                   : gen ([size]elm) =
     (\maxsize rng ->
        let rngs = split_rng size rng
        in #testdata (map (untestdata <-< arbitraryelm maxsize) rngs))

@@ -1,5 +1,14 @@
-module WriteFut (fixEntries, combineFutFuns, addStateGetters) where
-import ParseFut ( FutFunNames(..), ffTestName, isFucheckFun )
+module WriteFut (fixEntries, combineFutFuns, addStateGetters, entryTest) where
+import ParseFut ( FutFunNames(..)
+                , ffTestName
+                , isFucheckFun
+                , arbName
+                , propName
+                , showName
+                , condName
+                , stateName
+                , labelName
+                )
 
 
 -- TODO change tmp name
@@ -21,20 +30,21 @@ lada2str Nil = []
 lada2str (Break es) = '\n':lada2str es
 lada2str (Cons e es) = e ++ " " ++ lada2str es
 
--- Turn test functions into entries and everything else in let-bindings
--- Turns any let-binding share a name with a test function into an entry,
--- even those within functions.
--- Also turns any entry into a let-binding, even if (invalidly) within a function
+-- Turns entry into let
 fixEntries :: [FutFunNames] -> String -> String
 fixEntries tests programtext = lada2str $ fixer $ str2lada  programtext
   where
     fixer (Cons e es) =
-      if e == "let" || e == "entry"
-      then case (tests `contains`) <$> next es of
-             Just True  -> Cons "entry" (fixer es)
-             Just False -> Cons "let" (fixer es)
-             Nothing    -> es
+      if e == "entry"
+      then Cons "let" (fixer es)
       else Cons e (fixer es)
+    --fixer (Cons e es) =
+    --  if e == "let" || e == "entry"
+    --  then case (tests `contains`) <$> next es of
+    --         Just True  -> Cons "let" (fixer es)
+    --         Just False -> Cons "let" (fixer es)
+    --         Nothing    -> es
+    --  else Cons e (fixer es)
     fixer (Break acc) = Break $ fixer acc
     fixer Nil = Nil
 
@@ -72,4 +82,27 @@ addStateGetters =
           , "entry maxtests (state : " ++ futStateDef ++ ") : maxtests = state.maxtests"
           , "entry maxsize  (state : " ++ futStateDef ++ ") : maxsize = state.maxsize"
           , "entry maxdiscardedratio (state : " ++ futStateDef ++ ") : maxdiscardedratio = state.maxdiscardedratio"
+          ]
+
+sizeIndexes 1 = " sizes[0] "
+sizeIndexes n = sizeIndexes (n-1) ++ "sizes[" ++ show (n-1) ++ "] "
+
+-- Should generate unique names
+-- Should not be dependent on Open Fucheck
+entryFun test rettype f =
+  "entry entry_" ++ f test ++ " (size : i32) (seed : i32) : " ++ rettype ++ "=\n"
+  ++ "  let rngs = split_rng 2 <| rng_from_seed seed\n"
+  ++ "  let sizes = getsizes size rngs[0] " ++ show (numSizes test) ++ "\n"
+  ++ "  in " ++ f test ++ " (" ++ arbName test ++ sizeIndexes (numSizes test) ++ "rngs[1])"
+
+
+entryState test = "entry entry_" ++ stateName test ++ " : state = " ++ stateName test
+
+entryTest test =
+  unlines --[ if arbFound   test then entryGen    test else ""
+          [ if propFound  test then entryFun test "bool" propName  else ""
+          , if showFound  test then entryFun test "[]u8" showName  else ""
+          , if condFound  test then entryFun test "bool" condName  else ""
+          , if labelFound test then entryFun test "[]u8" labelName else ""
+          , if stateFound test then entryState  test else ""
           ]
