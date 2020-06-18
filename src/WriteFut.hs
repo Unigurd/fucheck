@@ -1,4 +1,6 @@
 module WriteFut (fixEntries, combineFutFuns, addStateGetters, entryTest) where
+import Data.Char (isSpace)
+import Data.List (dropWhileEnd, foldl')
 import ParseFut ( FutFunNames(..)
                 , ffTestName
                 , isFucheckFun
@@ -11,49 +13,41 @@ import ParseFut ( FutFunNames(..)
                 )
 
 
--- TODO change tmp name
--- a list that contains linebreaks
--- change to list of tuples where fst tup is whitespace before word and snd tup is word
-data Lada a = Cons a (Lada a) | Break (Lada a) | Nil
-list2lada [] = Nil
-list2lada (e:es) = Cons e $ list2lada es
 
-str2lada :: String -> Lada String
-str2lada = foldr (\elm acc -> comb (list2lada elm) (Break acc)) Nil . fmap words . lines
+data AttList a b = AttList [(a,b)] deriving Show
+
+instance Functor (AttList a) where
+  fmap f (AttList list) = AttList $ zip secret newShown
+    where
+      (secret,shown) = unzip list
+      newShown = f <$> shown
+
+-- Separate chunks of whitespace and chunks of non-whitespace
+spaceWords :: String -> [String]
+spaceWords (c1:c2:cs) =
+  if isSpace c1 == isSpace c2 then
+    (c1:r):rs
+  else
+    [c1] : spaceWords (c2:cs)
+    where (r:rs) = spaceWords (c2:cs)
+spaceWords [c] = [[c]]
+spaceWords [] = [[]]
+
+hideWhiteSpace string = AttList $ uncurry zip $ splitInTwo even
   where
-    comb Nil la2 = la2
-    comb (Cons e es) la2 = Cons e (comb es la2)
-    comb (Break es)  la2 = Break (comb es la2)
+    cleanButt = dropWhileEnd isSpace string
+    separated = spaceWords cleanButt
+    even      = if length separated `mod` 2 /= 0 then "":separated else separated
+    splitInTwo []  = ([],[])
+    splitInTwo (a:as) = (a:ys,xs)
+      where (xs,ys) = splitInTwo as
 
-lada2str :: Lada String -> String
-lada2str Nil = []
-lada2str (Break es) = '\n':lada2str es
-lada2str (Cons e es) = e ++ " " ++ lada2str es
+mendWhiteSpace (AttList list) = foldr (\(white,word) acc -> white ++ word ++ acc) "" list
 
 -- Turns entry into let
 fixEntries :: [FutFunNames] -> String -> String
-fixEntries tests programtext = lada2str $ fixer $ str2lada  programtext
-  where
-    fixer (Cons e es) =
-      if e == "entry"
-      then Cons "let" (fixer es)
-      else Cons e (fixer es)
-    --fixer (Cons e es) =
-    --  if e == "let" || e == "entry"
-    --  then case (tests `contains`) <$> next es of
-    --         Just True  -> Cons "let" (fixer es)
-    --         Just False -> Cons "let" (fixer es)
-    --         Nothing    -> es
-    --  else Cons e (fixer es)
-    fixer (Break acc) = Break $ fixer acc
-    fixer Nil = Nil
-
-    tests `contains` testname = any (isFucheckFun testname) tests
-
-    next Nil          = Nothing
-    next (Break rest) = next rest
-    next (Cons e _)   = Just e
-
+fixEntries tests programtext = mendWhiteSpace $ fix <$> hideWhiteSpace programtext
+  where fix w = if w == "entry" then "let" else w
 
 -- Combine futhark functions for type checking
 -- doesn't work for some arrays
@@ -90,7 +84,7 @@ sizeIndexes n = sizeIndexes (n-1) ++ "sizes[" ++ show (n-1) ++ "] "
 -- Should generate unique names
 -- Should not be dependent on Open Fucheck
 entryFun test rettype f =
-  "entry entry_" ++ f test ++ " (size : i32) (seed : i32) : " ++ rettype ++ "=\n"
+  "entry entry_" ++ f test ++ " (size : i32) (seed : i32) : " ++ rettype ++ " =\n"
   ++ "  let rngs = split_rng 2 <| rng_from_seed seed\n"
   ++ "  let sizes = getsizes size rngs[0] " ++ show (numSizes test) ++ "\n"
   ++ "  in " ++ f test ++ " (" ++ arbName test ++ sizeIndexes (numSizes test) ++ "rngs[1])"
