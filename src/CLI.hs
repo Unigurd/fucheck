@@ -8,13 +8,17 @@ module CLI ( WhichTests(..)
            , gccArgs
            ) where
 
+import Text.Read (readMaybe)
 import ParseFut (only, without)
 
 -- Which tests to include/exclude
-data WhichTests = All | Only [String] | Without [String]
+data WhichTests = All | Only [String] | Without [String] | First Int | Last Int
 filterTests All tests             = tests
 filterTests (Only these) tests    = only these tests
 filterTests (Without these) tests = without these tests
+filterTests (First n) tests       = take n tests
+filterTests (Last n) tests        = takeLast n tests
+  where takeLast n = reverse . take n . reverse
 
 -- Which compiler to use
 data Compiler = C | OpenCL deriving Show
@@ -67,13 +71,6 @@ getCompiler rest            = (C, rest)
 getFilename [] = errorWithoutStackTrace "Missing file argument"
 getFilename (filename:rest) = (filename, rest)
 
-getFilter ["--without"] = errorWithoutStackTrace "Missing test arguments to --without"
-getFilter ["--only"]    = errorWithoutStackTrace "Missing test arguments to --only"
-getFilter ("--without":tests) = Without tests
-getFilter ("--only":tests)    = Only tests
-getFilter []                  = All
-getFilter garbage = errorWithoutStackTrace ("Did not understand: " ++ unwords garbage)
-
 isFlag ('-':_) = True
 isFlag _       = False
 
@@ -93,7 +90,7 @@ separateFlags args = helper args []
 
 -- The different flags
 compilerFlags   = ["c","--c","opencl","--opencl"]
-testFilterFlags = ["--only","--without"]
+testFilterFlags = ["--only","--without","--first","--last"]
 actionFlags     = ["--out", "-o", "--run"]
 
 -- Test whether a word matches some type of flag
@@ -109,6 +106,25 @@ compFlag2comp badFlag = Left $ "unrecognized compiler flag: " ++ badFlag
 
 testFilterFlag2testFilter ("--only":args)    = Right $ Only args
 testFilterFlag2testFilter ("--without":args) = Right $ Without args
+testFilterFlag2testFilter ["--first"] = Right $ First 1
+testFilterFlag2testFilter ["--first",numStr] =
+  case readMaybe numStr of
+    Just num -> if num >= 0 then
+                  Right $ First num
+                else Left
+                     $ "--first " ++ numStr ++ ": "
+                     ++ numStr ++ " is negative"
+    Nothing -> Left
+               $ "--last " ++ numStr ++ ": "
+               ++ numStr ++ " not a number"
+testFilterFlag2testFilter ["--last"] = Right $ Last 1
+testFilterFlag2testFilter ["--last",numStr] =
+  case readMaybe numStr of
+    Just num -> if num >= 0 then
+                  Right $ Last num
+                else Left
+                     $ "--last " ++ numStr ++ ": "
+                     ++ numStr ++ " is negative"
 testFilterFlag2testFilter _ = Left stdErrMsg
 
 actionFlag2action ["--out"]      = Right $ SaveFile Nothing
