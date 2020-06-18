@@ -32,7 +32,7 @@ gccArgs args tmpFile =
     OpenCL -> [tmpFile ++ ".c", "-lOpenCL", "-o", tmpFile ++ ".so", "-fPIC", "-shared"]
 
 -- Whether to save preprocessed program or test it
-data Action = Run | SaveFile deriving Eq
+data Action = Run | SaveFile (Maybe String) deriving Eq
 
 -- CLI args
 data Args = Args { file       :: String
@@ -94,7 +94,7 @@ separateFlags args = helper args []
 -- The different flags
 compilerFlags   = ["c","--c","opencl","--opencl"]
 testFilterFlags = ["--only","--without"]
-actionFlags     = ["--save", "--run"]
+actionFlags     = ["--out", "-o", "--run"]
 
 -- Test whether a word matches some type of flag
 matches :: String -> [String] -> Bool
@@ -111,8 +111,11 @@ testFilterFlag2testFilter ("--only":args)    = Right $ Only args
 testFilterFlag2testFilter ("--without":args) = Right $ Without args
 testFilterFlag2testFilter _ = Left stdErrMsg
 
-actionFlag2action "--save" = Right SaveFile
-actionFlag2action "--run"  = Right Run
+actionFlag2action ["--out"]      = Right $ SaveFile Nothing
+actionFlag2action ["-o"]         = Right $ SaveFile Nothing
+actionFlag2action ["--out",file] = Right $ SaveFile $ Just file
+actionFlag2action ["-o", file]   = Right $ SaveFile $ Just file
+actionFlag2action ["--run"]      = Right Run
 actionFlag2action _ = Left stdErrMsg
 
 -- parses --c, --opencl, c and opencl
@@ -136,7 +139,7 @@ parseTestFilter flag (args,given) =
 
 -- parses --save and --run
 parseAction [] _ = Left stdErrMsg
-parseAction [flag] (args,given) =
+parseAction flag (args,given) =
   if actionGiven given then
     Left "Action was specified more than once"
   else do

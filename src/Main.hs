@@ -130,10 +130,18 @@ main = do
                 , entryText
                 ]
   tmpFutFile <- uniqueFile filename
-  writeFile tmpFutFile alteredprogram
 
   -- Quit if only meant to write test program to file
-  if action args == SaveFile then exitSuccess else return ()
+  case action args of
+    SaveFile (Just file) -> do
+      writeFile file alteredprogram
+      exitSuccess
+    SaveFile Nothing -> do
+      writeFile tmpFutFile alteredprogram
+      exitSuccess
+    Run -> do
+      writeFile tmpFutFile alteredprogram
+      return ()
 
   -- Check whether futhark and gcc is installed
   (whichFutharkExitCode, _, _) <-
