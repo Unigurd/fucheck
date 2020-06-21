@@ -1,14 +1,6 @@
 import "/home/sigurd/studie/bachelor/fucheck/src/futs/fucheck"
 open Fucheck
 
--- ==
--- input @ scan_100.in
--- input @ scan_1000.in
--- input @ scan_10000.in
--- input @ scan_100000.in
--- input @ scan_1000000.in
--- input @ scan_10000000.in
-
 let segscan [n] 't (op: t -> t -> t) (ne: t) (arr: [n](t, bool)) : [n]t =
     let tuples = scan (\ (v1:t, f1:bool) (v2:t, f2:bool) ->
                    ((if f2 then v2 else op v1 v2), (f1 || f2))
@@ -19,9 +11,10 @@ let segscan [n] 't (op: t -> t -> t) (ne: t) (arr: [n](t, bool)) : [n]t =
 let main [n] (arr: [n]i32) (arrB: [n]bool) : [n]i32 =
   segscan (+) 0 (zip arr arrB)
 
+-- testing with fucheck begins here
+
 let fst (a,_) = a
 let snd (_,b) = b
-
 
 let crude_segscan [n] (op: i32 -> i32 -> i32) (ne: i32) (arr: [n](i32,bool)) : [n]i32 =
   let (right,almostdone) =

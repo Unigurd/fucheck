@@ -1,20 +1,6 @@
 import "/home/sigurd/studie/bachelor/fucheck/src/futs/fucheck"
 open Fucheck
 
--- ==
--- input @ one_64_i32.in
--- output @ one_64_i32_ex.out
--- input @ one_1024_i32.in
--- output @ one_1024_i32_ex.out
--- input @ one_16384_i32.in
--- output @ one_16384_i32_ex.out
--- input @ one_262144_i32.in
--- output @ one_262144_i32_ex.out
--- input @ one_4194304_i32.in
--- output @ one_4194304_i32_ex.out
--- input @ one_33554432_i32.in
--- output @ one_33554432_i32_ex.out
-
 let ilog2 (x: i32) = 31 - i32.clz x
 
 let work_efficient [n] (xs: [n]i32) : [n]i32 =
@@ -45,6 +31,12 @@ let work_efficient [n] (xs: [n]i32) : [n]i32 =
     in scatter xs' blue_src red_vals
   in downswept
 
+-- main
+let main (s: []i32) : []i32 =
+  work_efficient s
+
+-- testing with fucheck begins here
+
 let show (input : testdata ([]i32)) : []u8 =
   show_array showdecimali32 input
 
@@ -71,8 +63,3 @@ let prop_with_zero_arr = prop
 
 let show_with_zero_arr = show
 
-  -- ==
-  -- entry: main
-  -- input { [1,2,3,4] } output { [1,3,6,10] }
-let main (s: []i32) : []i32 =
-  work_efficient s

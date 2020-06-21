@@ -1,20 +1,6 @@
+import "lib/github.com/diku-dk/sorts/radix_sort"
 import "../src/futs/fucheck"
 open Fucheck
-
--- ==
--- input @ red_by_index_100.in
--- output @ red_by_index_100.out
--- input @ red_by_index_1000.in
--- output @ red_by_index_1000.out
--- input @ red_by_index_10000.in
--- output @ red_by_index_10000.out
--- input @ red_by_index_100000.in
--- output @ red_by_index_100000.out
--- input @ red_by_index_1000000.in
--- output @ red_by_index_1000000.out
-
-
-import "lib/github.com/diku-dk/sorts/radix_sort"
 
 let segscan [n] 't (op: t -> t -> t) (ne: t) (arr: [n](t, bool)) : [n]t =
     let tuples = scan (\ (v1:t, f1:bool) (v2:t, f2:bool) ->
@@ -29,8 +15,9 @@ let segreduce 't [n] (op: t -> t -> t) (ne: t) (arr: [n](t, bool)): []t =
     let (res, _) = unzip <| filter (\(_, f) -> f) <| zip scanned (rotate 1 flags)
     in res
 
--- added my_ to name and a couple of casts to Ulriks code
--- for use by fucheck
+-- Changes introduced for fucheck testing:
+-- added my_ to name and a couple of casts since the code
+-- was written before static size types were added
 let my_reduce_by_index [m] [n] (dest : *[m]i32)
                     (f : i32 -> i32 -> i32) (ne : i32)
                     (is : [n]i32) (as : [n]i32) : []i32 =
@@ -46,6 +33,13 @@ let my_reduce_by_index [m] [n] (dest : *[m]i32)
     let segred_as = segreduce f ne (zip as is_flags) :> [castsize]i32
     let mapme = scatter (replicate m ne) filtered_is segred_as
     in map2 f dest mapme
+
+let main [m] [n] (dest : [m]i32) (is' : [n]i32) (as' : [n]i32) : []i32 =
+  -- I do the sorting here because I couldn't figure out how to do num_bits etc with type 'a
+  let (is, as)  = zip is' as' |> radix_sort_by_key (.1) i32.num_bits i32.get_bit |> unzip in
+  my_reduce_by_index (copy dest) (+) 0 is as
+
+-- testing with fucheck begins here
 
 -- fucheck red_idx
 let gen_red_idx (size : i32) (seed : i32) : testdata ([]i32,[]i32,[]i32) =
@@ -65,9 +59,4 @@ let show_red_idx [m] [n] (input : testdata ([m]i32,[n]i32,[n]i32)) : []u8 =
   let sm = show_array showdecimali32
   in show3tuple sn sm sm input
 
-
-let main [m] [n] (dest : [m]i32) (is' : [n]i32) (as' : [n]i32) : []i32 =
-  -- I do the sorting here because I couldn't figure out how to do num_bits etc with type 'a
-  let (is, as)  = zip is' as' |> radix_sort_by_key (.1) i32.num_bits i32.get_bit |> unzip in
-  my_reduce_by_index (copy dest) (+) 0 is as
 

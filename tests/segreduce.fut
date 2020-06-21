@@ -1,14 +1,6 @@
 import "/home/sigurd/studie/bachelor/fucheck/src/futs/fucheck"
 open Fucheck
 
--- ==
--- input @ red_100.in
--- input @ red_1000.in
--- input @ red_10000.in
--- input @ red_100000.in
--- input @ red_1000000.in
--- input @ red_10000000.in
-
 let segscan [n] 't (op: t -> t -> t) (ne: t) (arr: [n](t, bool)) : [n]t =
     let tuples = scan (\ (v1:t, f1:bool) (v2:t, f2:bool) ->
                    ((if f2 then v2 else op v1 v2), (f1 || f2))
@@ -25,6 +17,7 @@ let segreduce 't [n] (op: t -> t -> t) (ne: t) (arr: [n](t, bool)): []t =
 let main [n] (arr: [n]i32) (arrB: [n]bool) : []i32 =
   segreduce (+) 0 (zip arr arrB)
 
+-- testing with fucheck begins here
 
 let fst (a,_) = a
 let snd (_,b) = b

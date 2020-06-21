@@ -1,15 +1,6 @@
 import "../src/futs/fucheck"
 open Fucheck
 
--- ==
--- input @ two_100_i32s
--- input @ two_1000_i32s
--- input @ two_10000_i32s
--- input @ two_100000_i32s
--- input @ two_1000000_i32s
--- input @ two_5000000_i32s
--- input @ two_10000000_i32s
-
 let process (s1: []i32) (s2: []i32): i32 =
   reduce i32.max 0 (map i32.abs (map2 (-) s1 s2))
 
@@ -21,6 +12,11 @@ let process_gen (size : size) (seed : i32) : testdata ([]i32, []i32) =
 
 let process_show [n] (input : testdata ([n]i32, [n]i32)) : []u8 =
     showtuple (show_array showdecimali32) (show_array showdecimali32) input
+
+let main (s1: []i32) (s2: []i32) : i32 =
+  process s1 s2
+
+-- testing with fucheck begins here
 
 -- fucheck proc_comm
 let gen_proc_comm = process_gen
@@ -47,5 +43,3 @@ let prop_proc_maxdiff [n] (input : testdata ([n]i32, [n]i32)) : bool =
 
 let show_proc_maxdiff = process_show
 
-let main (s1: []i32) (s2: []i32) : i32 =
-  process s1 s2
