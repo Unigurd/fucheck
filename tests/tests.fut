@@ -1,4 +1,4 @@
-import "/home/sigurd/studie/bachelor/fucheck/src/futs/fucheck"
+import "../src/futs//fucheck"
 open Fucheck
 
 
@@ -38,7 +38,7 @@ entry show_tupleMightFail = show2tuple showdecimali32 showdecimali32
 -- fucheck bool
 entry gen_bool = arbitrarybool
 
-entry prop_bool b = b
+entry prop_bool b = b : bool
 
 entry show_bool = showbool
 
@@ -62,16 +62,16 @@ entry labels_cond ((i,j): (i32,i32)) : []u8 =
 
 
 -- fucheck zip 1
-let gen_zip arrsize size rng : ([arrsize]i32, [arrsize]i32) =
-    let my_arb = (arbitraryarr arbitraryi32 arrsize)
-    in arbitrarytuple my_arb my_arb size rng
+let gen_zip arrsize : gen ([arrsize]i32, [arrsize]i32) = \size rng ->
+  let my_arb = (arbitraryarr arbitraryi32 arrsize)
+  in arbitrarytuple my_arb my_arb size rng
 
 entry prop_zip [n] ((as,bs) : ([n]i32,[n]i32)) : bool =
    (as,bs) == unzip (zip as bs)
 
 -- fucheck transpose 2
-entry gen_transpose arrsize0 arrsize1 size rng : [arrsize0][arrsize1]i32 =
-    scale (10+) (arbitrary2darr arbitraryi32 arrsize0 arrsize1) size rng
+entry gen_transpose arrsize0 arrsize1 : gen ([arrsize0][arrsize1]i32) = \size rng ->
+  scale (10+) (arbitrary2darr arbitraryi32 arrsize0 arrsize1) size rng
 
 entry prop_transpose [n] [m] (matrix : [n][m]i32) : bool =
   matrix == transpose (transpose matrix)

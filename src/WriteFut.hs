@@ -85,9 +85,9 @@ sizeIndexes n = sizeIndexes (n-1) ++ "sizes[" ++ show (n-1) ++ "] "
 -- Should not be dependent on Open Fucheck
 entryFun test rettype f =
   "entry entry_" ++ f test ++ " (size : i32) (seed : i32) : " ++ rettype ++ " =\n"
-  ++ "  let rngs = split_rng 2 <| rng_from_seed seed\n"
-  ++ "  let sizes = getsizes size rngs[0] " ++ show (numSizes test) ++ "\n"
-  ++ "  in " ++ f test ++ " (" ++ arbName test ++ sizeIndexes (numSizes test) ++ "rngs[1])"
+  ++ "  let rng = rng_from_seed seed\n"
+  ++ "  let (rng, sizes) = getsizes size rng " ++ show (numSizes test) ++ "\n"
+  ++ "  in " ++ f test ++ " (" ++ arbName test ++ sizeIndexes (numSizes test) ++ "rng).1"
 
 
 entryState test = "entry entry_" ++ stateName test ++ " : state = " ++ stateName test
