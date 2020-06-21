@@ -1,10 +1,9 @@
-import "/home/sigurd/studie/bachelor/fucheck/src/futs/fucheck"
+import "../src/futs//fucheck"
 open Fucheck
 
 let ilog2 (x: i32) = 31 - i32.clz x
 
 let work_efficient [n] (xs: [n]i32) : [n]i32 =
-  unsafe
   let m = ilog2 n
   let upswept =
     loop xs = copy xs for d in (m-1..m-2...0) do
@@ -37,27 +36,24 @@ let main (s: []i32) : []i32 =
 
 -- testing with fucheck begins here
 
-let show (input : testdata ([]i32)) : []u8 =
+let show (input : ([]i32)) : []u8 =
   show_array showdecimali32 input
 
-let prop (input : testdata ([]i32)) : bool =
-  match input
-  case #testdata arr ->
-    scan (+) 0 arr ==  work_efficient arr
+let prop (arr : ([]i32)) : bool =
+  scan (+) 0 arr ==  work_efficient arr
 
 -- fucheck non_zero_arr
-let gen_non_zero_arr (size : i32) (seed : i32) : testdata ([]i32) =
-  let rngs = split_rng 2 <| rng_from_seed seed
-  let sizes = getsizes size rngs[0] 1
+let gen_non_zero_arr : gen ([]i32) = \size rng ->
+  let (rng, sizes) = getsizes size rng 1
   let arrgen = arbitraryarr arbitraryi32 <| 2 ** (ilog2 0 + 1)
-  in arrgen size rngs[1]
+  in arrgen sizes[0] rng
 
 let prop_non_zero_arr = prop
 
 let show_non_zero_arr = show
 
 -- fucheck with_zero_arr
-let gen_with_zero_arr (_ : i32) (_ : i32) : testdata ([]i32) = testdata []
+let gen_with_zero_arr (_ : i32) (_ : i32) : ([]i32) = []
 
 let prop_with_zero_arr = prop
 

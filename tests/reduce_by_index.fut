@@ -1,5 +1,5 @@
-import "lib/github.com/diku-dk/sorts/radix_sort"
 import "../src/futs/fucheck"
+import "lib/github.com/diku-dk/sorts/radix_sort"
 open Fucheck
 
 let segscan [n] 't (op: t -> t -> t) (ne: t) (arr: [n](t, bool)) : [n]t =
@@ -21,7 +21,6 @@ let segreduce 't [n] (op: t -> t -> t) (ne: t) (arr: [n](t, bool)): []t =
 let my_reduce_by_index [m] [n] (dest : *[m]i32)
                     (f : i32 -> i32 -> i32) (ne : i32)
                     (is : [n]i32) (as : [n]i32) : []i32 =
-    unsafe
     let (is', is_flags) = unzip <| map2(\iot i ->
                                           if (iot == 0) || is[iot] > is[iot-1]
                                             then (i, true)
@@ -42,19 +41,16 @@ let main [m] [n] (dest : [m]i32) (is' : [n]i32) (as' : [n]i32) : []i32 =
 -- testing with fucheck begins here
 
 -- fucheck red_idx
-let gen_red_idx (size : i32) (seed : i32) : testdata ([]i32,[]i32,[]i32) =
-  let rngs = split_rng 2 <| rng_from_seed seed
-  let sizes = getsizes size rngs[0] 2
-  let elm_arr_gen = (arbitraryarr arbitraryi32 sizes[0])
-  let idx_arr_gen = (arbitraryarr (transformgen i32.abs arbitraryi32) sizes[1])
-  in arbitrary3tuple idx_arr_gen elm_arr_gen elm_arr_gen size rngs[1]
+let gen_red_idx : gen ([]i32,[]i32,[]i32) = \size rng ->
+  let (rng, sizes) = getsizes size rng 2
+  let elm_arr_gen = arbitraryarr arbitraryi32 sizes[0]
+  let idx_arr_gen = arbitraryarr (transformgen i32.abs arbitraryi32) sizes[1]
+  in arbitrary3tuple idx_arr_gen elm_arr_gen elm_arr_gen size rng
 
-let prop_red_idx [m] [n] (input : testdata ([m]i32,[n]i32,[n]i32)) : bool =
-  match input
-  case #testdata (dest, as, is) ->
-    my_reduce_by_index (copy dest) (+) 0 is as == reduce_by_index (copy dest) (+) 0 is as
+let prop_red_idx [m] [n] ((dest, as, is) : ([m]i32,[n]i32,[n]i32)) : bool =
+  my_reduce_by_index (copy dest) (+) 0 is as == reduce_by_index (copy dest) (+) 0 is as
 
-let show_red_idx [m] [n] (input : testdata ([m]i32,[n]i32,[n]i32)) : []u8 =
+let show_red_idx [m] [n] (input : ([m]i32,[n]i32,[n]i32)) : []u8 =
   let sn = show_array showdecimali32
   let sm = show_array showdecimali32
   in show3tuple sn sm sm input

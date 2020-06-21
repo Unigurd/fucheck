@@ -1,4 +1,4 @@
-import "/home/sigurd/studie/bachelor/fucheck/src/futs/fucheck"
+import "../src/futs//fucheck"
 open Fucheck
 
 let segscan [n] 't (op: t -> t -> t) (ne: t) (arr: [n](t, bool)) : [n]t =
@@ -28,16 +28,13 @@ let crude_segscan [n] (op: i32 -> i32 -> i32) (ne: i32) (arr: [n](i32,bool)) : [
   in result :> [n]i32
 
 -- fucheck segscan
-let gen_segscan (size : i32) (seed : i32) : testdata ([](i32,bool)) =
-  let rngs = split_rng 2 <| rng_from_seed seed
-  let sizes = getsizes size rngs[0] 1
+let gen_segscan : gen ([](i32,bool)) = \size rng ->
+  let (rng, sizes) = getsizes size rng 1
   let arrgen = arbitraryarr (arbitrarytuple arbitraryi32 arbitrarybool) sizes[0]
-  in arrgen size rngs[1]
+  in arrgen size rng
 
-let prop_segscan [n] (input : testdata ([n](i32,bool))) : bool =
-  match input
-  case #testdata arr ->
-    crude_segscan (+) 0 arr == segscan (+) 0 arr
+let prop_segscan [n] (arr : ([n](i32,bool))) : bool =
+  crude_segscan (+) 0 arr == segscan (+) 0 arr
 
-let show_segscan [n] (input : testdata ([n](i32,bool))) : []u8 =
+let show_segscan [n] (input : ([n](i32,bool))) : []u8 =
   show_array (showtuple showdecimali32 showbool) input

@@ -3,15 +3,13 @@ import "rng"
 module Gen = {
   open Rng
 
-  type^ gen 'a = size -> rng -> a
-
-
+  type^ gen 'a = size -> rng -> (rng, a)
 
   -- instead of arbitrarysortedarray
   -- so as not to write a sorting function / add a dependency
   -- simply supply an array generator and a sorting function
   let transformgen 'a 'b (f : a -> b) (g : gen a) : gen b =
-    (\size rng -> f (g size rng))
+    (\size rng -> let (rng, x) = g size rng in (rng, f x))
 
   let choose_i8 (bounds : (i8,i8)) : gen i8 =
     (\_ r ->  rand_i8 bounds r)
@@ -52,18 +50,18 @@ module Gen = {
     (\size rng -> oldgen (fun size) rng)
 
   let constgen 't (const : t) : gen t =
-    (\_ _ -> const)
+    (\_ rng -> (rng, const))
 
   let frequencyof2 'elm
                  ((freq0,gen0) : (i32, gen elm))
                  ((freq1,gen1) : (i32, gen elm))
                  : gen elm =
     (\size rng ->
-       let rngs = split_rng 3 rng
        let totalfreq = freq0 + freq1
-       in if rand_i32 (1,totalfreq) rngs[0] <= freq0
-          then gen0 size rngs[1]
-          else gen1 size rngs[2])
+       let (rng, f) = rand_i32 (1,totalfreq) rng
+       in if f <= freq0
+          then gen0 size rng
+          else gen1 size rng)
 
   let oneof2 'elm
            (gen0 : gen elm)
@@ -126,8 +124,8 @@ module Gen = {
 
   let elements 'elm [n] (elms : [n]elm) : gen elm =
     (\_ rng ->
-       let i = rand_i32 (0,n-1) rng
-       in elms[i])
+       let (rng, i) = rand_i32 (0,n-1) rng
+       in (rng, elms[i]))
 
 
   let arbitrarybool : gen bool =  choose_bool (false,true)
@@ -177,69 +175,64 @@ module Gen = {
 
   let arbitrary_f32_nan : gen f32 =
     \_ rng ->
-      let rngs = split_rng 2 rng
-      in (f32.from_bits ((rand_u32 (0,1) rngs[0] << 31)
-                         & 0x7f800000
-                         & rand_u32 (1, 0x007fffff) rngs[1]))
+      let (rng, x) = rand_u32 (0,1) rng
+      let (rng, y) = rand_u32 (1, 0x007fffff) rng
+      in (rng, f32.from_bits ((x << 31) & 0x7f800000 & y))
 
   let arbitrary_f32_subnormal : gen f32 =
     \_ rng ->
-      let rngs = split_rng 2 rng
-      in  (f32.from_bits <| ( rand_u32 (0,1) rngs[0] << 31 )
-                            & rand_u32 (0, 0x007fffff) rngs[1] )
+      let (rng, x) = rand_u32 (0,1) rng
+      let (rng, y) = rand_u32 (0, 0x007fffff) rng
+      in (rng, f32.from_bits ((x << 31 ) & y) )
 
   let arbitrary_f32_normal : gen f32 =
     \size rng ->
-      let rngs = split_rng 2 rng
-      in (f32.from_bits <| (rand_u32 (0,u32.min 0xff (u32.i32 size)) rngs[0] << 23)
-                           & rand_u32 (0, 0x007fffff) rngs[1])
+      let (rng, x) = rand_u32 (0,u32.min 0xff (u32.i32 size)) rng
+      let (rng, y) = rand_u32 (0, 0x007fffff) rng
+      in (rng, f32.from_bits <| (x << 23) & y)
 
   let arbitrary_f32 : gen f32 =
   let precision = 9999999999999
   in (\n rng->
-        let rngs = split_rng 2 rng
         let n' = i64.i32 n
-        let b = rand_i64 (1,precision) rngs[0]
-        let a = rand_i64 ((-n') * b, n' * b) rngs[1]
-        in (f32.i64 a % f32.i64 b))
+        let (rng, b) = rand_i64 (1,precision) rng
+        let (rng, a) = rand_i64 ((-n') * b, n' * b) rng
+        in (rng, f32.i64 a % f32.i64 b))
 
   let arbitrary_f64_infty : gen f64 =
     elements [f64.from_bits 0x7ff0000000000000, f64.from_bits 0xfff0000000000000]
 
   let arbitrary_f64_nan : gen f64 =
     \_ rng ->
-      let rngs = split_rng 2 rng
-      in (f64.from_bits ((rand_u64 (0,1) rngs[0] << 63)
-                         & 0x7ff0000000000000
-                         & rand_u64 (1, 0xfffffffffffff) rngs[1]))
+      let (rng, a) = rand_u64 (0,1) rng
+      let (rng, b) = rand_u64 (1, 0xfffffffffffff) rng
+      in (rng, f64.from_bits ((a << 63) & 0x7ff0000000000000 & b))
 
   let arbitrary_f64_subnormal : gen f64 =
     \_ rng ->
-      let rngs = split_rng 2 rng
-      in (f64.from_bits <| ( rand_u64 (0,1) rngs[0] << 63)
-                           & rand_u64 (0, 0xfffffffffffff) rngs[1])
+      let (rng, a) = rand_u64 (0,1) rng
+      let (rng, b) = rand_u64 (0, 0xfffffffffffff) rng
+      in (rng, f64.from_bits <| (a  << 63) & b)
 
   let arbitrary_f64_normal : gen f64 =
     \size rng ->
-      let rngs = split_rng 2 rng
-      in (f64.from_bits <| (rand_u64 (0,u64.min 0x7ff (u64.i32 size)) rngs[0] << 52)
-                           & rand_u64 (0, 0xfffffffffffff) rngs[1])
+      let (rng, a) = rand_u64 (0,u64.min 0x7ff (u64.i32 size)) rng
+      let (rng, b) = rand_u64 (0, 0xfffffffffffff) rng
+      in (rng, f64.from_bits <| (a << 52) & b)
 
   let arbitrary_f64 : gen f64 =
   let precision = 9999999999999
-  in (\n rng->
-        let rngs = split_rng 2 rng
+  in (\n rng ->
         let n' = i64.i32 n
-        let b = rand_i64 (1,precision) rngs[0]
-        let a = rand_i64 ((-n') * b, n' * b) rngs[1]
-        in (f64.i64 a % f64.i64 b))
+        let (rng, b) = rand_i64 (1,precision) rng
+        let (rng, a) = rand_i64 ((-n') * b, n' * b) rng
+        in (rng, f64.i64 a % f64.i64 b))
 
   let arbitrarytuple 'a 'b (arbitrarya : gen a) (arbitraryb : gen b) : gen (a,b) =
-    (\n r ->
-       let rngs = split_rng 2 r
-       let a = arbitrarya n rngs[0]
-       let b = arbitraryb n rngs[1]
-       in (a,b))
+    (\n rng ->
+       let (rng, a) = arbitrarya n rng
+       let (rng, b) = arbitraryb n rng
+       in (rng, (a,b)))
 
   let arbitrary2tuple = arbitrarytuple
 
@@ -248,12 +241,11 @@ module Gen = {
                       (arbitraryb : gen b)
                       (arbitraryc : gen c)
                       : gen (a,b,c) =
-    (\n r ->
-       let rngs = split_rng 3 r
-       let a = arbitrarya n rngs[0]
-       let b = arbitraryb n rngs[1]
-       let c = arbitraryc n rngs[2]
-       in (a,b,c))
+    (\n rng ->
+       let (rng, a) = arbitrarya n rng
+       let (rng, b) = arbitraryb n rng
+       let (rng, c) = arbitraryc n rng
+       in (rng, (a,b,c)))
 
   let arbitrary4tuple 'a 'b 'c 'd
                       (arbitrarya : gen a)
@@ -261,13 +253,12 @@ module Gen = {
                       (arbitraryc : gen c)
                       (arbitraryd : gen d)
                       : gen (a,b,c,d) =
-    (\n r ->
-       let rngs = split_rng 4 r
-       let a = arbitrarya n rngs[0]
-       let b = arbitraryb n rngs[1]
-       let c = arbitraryc n rngs[2]
-       let d = arbitraryd n rngs[3]
-       in (a,b,c,d))
+    (\n rng ->
+       let (rng, a) = arbitrarya n rng
+       let (rng, b) = arbitraryb n rng
+       let (rng, c) = arbitraryc n rng
+       let (rng, d) = arbitraryd n rng
+       in (rng, (a,b,c,d)))
 
   let arbitrary5tuple 'a 'b 'c 'd 'e
                       (arbitrarya : gen a)
@@ -276,14 +267,13 @@ module Gen = {
                       (arbitraryd : gen d)
                       (arbitrarye : gen e)
                       : gen (a,b,c,d,e) =
-    (\n r ->
-       let rngs = split_rng 5 r
-       let a = arbitrarya n rngs[0]
-       let b = arbitraryb n rngs[1]
-       let c = arbitraryc n rngs[2]
-       let d = arbitraryd n rngs[3]
-       let e = arbitrarye n rngs[4]
-       in (a,b,c,d,e))
+    (\n rng ->
+       let (rng, a) = arbitrarya n rng
+       let (rng, b) = arbitraryb n rng
+       let (rng, c) = arbitraryc n rng
+       let (rng, d) = arbitraryd n rng
+       let (rng, e) = arbitrarye n rng
+       in (rng, (a,b,c,d,e)))
 
   let two   arb = arbitrary2tuple arb arb
   let three arb = arbitrary3tuple arb arb arb
@@ -296,7 +286,8 @@ module Gen = {
                    : gen ([size]elm) =
     (\maxsize rng ->
        let rngs = split_rng size rng
-       in map (arbitraryelm maxsize) rngs)
+       let (rngs, xs) = unzip (map (arbitraryelm maxsize) rngs)
+       in (r.join_rng rngs, xs))
 
   let arbitrary2darr 'elm
                  (arbitraryelm : gen elm)

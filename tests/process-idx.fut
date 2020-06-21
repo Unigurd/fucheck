@@ -16,20 +16,16 @@ let fst (a,_) = a
 
 -- fucheck proc
 let gen_proc = process_gen
-let prop_proc [n] (input : testdata ([n]i32, [n]i32)) : bool =
-  match input
-  case #testdata (arr0,arr1) -> process arr0 arr1 == fst (process_idx arr0 arr1)
+let prop_proc [n] ((arr0,arr1) : ([n]i32, [n]i32)) : bool =
+  process arr0 arr1 == fst (process_idx arr0 arr1)
 
 let show_proc = process_show
 
 -- fucheck idx
 let gen_idx = process_gen
-let prop_idx [n] (input : testdata ([n]i32, [n]i32)) : bool =
-  match input
-  case #testdata (arr0,arr1) ->
-    let (diff,idx) = process_idx arr0 arr1
-    let idx_diff = if n == 0 then 0 else i32.abs (arr0[idx] - arr1[idx])
-    --let idx_diff = (arr0[idx] - arr1[idx])
-    in diff == idx_diff
+let prop_idx [n] ((arr0,arr1) : ([n]i32, [n]i32)) : bool =
+  let (diff,idx) = process_idx arr0 arr1
+  let idx_diff = if n == 0 then 0 else i32.abs (arr0[idx] - arr1[idx])
+  in diff == idx_diff
 
 let show_idx = process_show
