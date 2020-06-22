@@ -57,12 +57,11 @@ let main [m] [n] (dest : [m]i32) (is' : [n]i32) (as' : [n]i32) : []i32 =
 
 -- testing with fucheck begins here
 
--- fucheck red_idx
-let gen_red_idx : gen ([]i32,[]i32,[]i32) = \size rng ->
-  let (rng, sizes) = getsizes size rng 2
-  let elm_arr_gen = arbitraryarr arbitraryi32 sizes[0]
-  let idx_arr_gen = arbitraryarr (transformgen i32.abs arbitraryi32) sizes[1]
-  in arbitrary3tuple idx_arr_gen elm_arr_gen elm_arr_gen size rng
+-- fucheck red_idx 2
+let gen_red_idx arrsize0 arrsize1 : gen ([arrsize0]i32,[arrsize1]i32,[arrsize1]i32) =
+  let idx_arr_gen = arbitraryarr (transformgen i32.abs arbitraryi32) arrsize0
+  let elm_arr_gen = arbitraryarr arbitraryi32 arrsize1
+  in arbitrary3tuple idx_arr_gen elm_arr_gen elm_arr_gen
 
 let prop_red_idx [m] [n] ((dest, as, is) : ([m]i32,[n]i32,[n]i32)) : bool =
   my_reduce_by_index (copy dest) (+) 0 is as == reduce_by_index (copy dest) (+) 0 is as

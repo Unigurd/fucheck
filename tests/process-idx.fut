@@ -31,16 +31,18 @@ let process_idx [n] (s1: [n]i32) (s2: [n]i32): (i32, i32) =
 
 let fst (a,_) = a
 
--- fucheck proc
+-- fucheck proc 1
 let gen_proc = process_gen
-let prop_proc [n] ((arr0,arr1) : ([n]i32, [n]i32)) : bool =
-  process arr0 arr1 == fst (process_idx arr0 arr1)
+let prop_proc [n] (arr : [n](i32,i32)) : bool =
+  let (arr0,arr1) = unzip arr
+  in process arr0 arr1 == fst (process_idx arr0 arr1)
 
 let show_proc = process_show
 
--- fucheck idx
+-- fucheck idx 1
 let gen_idx = process_gen
-let prop_idx [n] ((arr0,arr1) : ([n]i32, [n]i32)) : bool =
+let prop_idx [n] (arr : [n](i32, i32)) : bool =
+  let (arr0,arr1) = unzip arr
   let (diff,idx) = process_idx arr0 arr1
   let idx_diff = if n == 0 then 0 else i32.abs (arr0[idx] - arr1[idx])
   in diff == idx_diff

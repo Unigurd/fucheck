@@ -66,20 +66,17 @@ let prop [n] (arr : [n](i32,bool)) : bool =
 let show [n] (input : [n](i32,bool)) : []u8 =
   show_array (showtuple showdecimali32 showbool) input
 
--- fucheck segreduce
-let gen_segreduce : gen ([](i32,bool)) = \size rng ->
-  let (rng, sizes) = getsizes size rng 1
-  let arrgen = arbitraryarr (arbitrarytuple arbitraryi32 arbitrarybool) sizes[0]
-  in (transformgen fixfirst arrgen) size rng
+-- fucheck segreduce 1
+let gen_segreduce arrsize : gen ([arrsize](i32,bool)) =
+  let arrgen = arbitraryarr (arbitrarytuple arbitraryi32 arbitrarybool) arrsize
+  in (transformgen fixfirst arrgen)
 
 let prop_segreduce = prop
 let show_segreduce = show
 
--- fucheck segreduce_undefined
-let gen_segreduce_undefined : gen ([](i32,bool)) = \size rng ->
-  let (rng, sizes) = getsizes size rng 1
-  let arrgen = arbitraryarr (arbitrarytuple arbitraryi32 arbitrarybool) sizes[0]
-  in arrgen size rng
+-- fucheck segreduce_undefined 1
+let gen_segreduce_undefined arrsize : gen ([arrsize](i32,bool)) =
+  arbitraryarr (arbitrarytuple arbitraryi32 arbitrarybool) arrsize
 
 let prop_segreduce_undefined = prop
 let show_segreduce_undefined = show

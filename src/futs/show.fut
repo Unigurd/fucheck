@@ -85,7 +85,7 @@ let glp (factor : u64) (n : u64) =
   let showbool b = if b then "true" else "false"
 
   let showi64        (num : i64) = i64_str ""   show_base36 10 <| num
-  let showdecimali64 (num : i64) = i64_str ""   show_base36 10 <| num
+  let showdecimali64 = showi64
   let showhexi64     (num : i64) = i64_str "0x" show_base36 16 <| num
   let showoctali64   (num : i64) = i64_str "0o" show_base36 8  <| num
   let showbinaryi64  (num : i64) = i64_str "0b" show_base36 2  <| num

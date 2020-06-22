@@ -59,18 +59,16 @@ let show (input : ([]i32)) : []u8 =
 let prop (arr : ([]i32)) : bool =
   scan (+) 0 arr ==  work_efficient arr
 
--- fucheck non_zero_arr
-let gen_non_zero_arr : gen ([]i32) = \size rng ->
-  let (rng, sizes) = getsizes size rng 1
-  let arrgen = arbitraryarr arbitraryi32 <| 2 ** (ilog2 0 + 1)
-  in arrgen sizes[0] rng
+-- fucheck non_zero_arr 1
+let gen_non_zero_arr arrsize : gen ([]i32) =
+  arbitraryarr arbitraryi32 (2 ** (1 + ilog2 arrsize))
 
 let prop_non_zero_arr = prop
 
 let show_non_zero_arr = show
 
 -- fucheck with_zero_arr
-let gen_with_zero_arr (_ : i32) (_ : i32) : ([]i32) = []
+let gen_with_zero_arr : gen ([0]i32) = constgen []
 
 let prop_with_zero_arr = prop
 

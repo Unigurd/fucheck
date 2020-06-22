@@ -44,11 +44,9 @@ let crude_segscan [n] (op: i32 -> i32 -> i32) (ne: i32) (arr: [n](i32,bool)) : [
     if right == 0 then almostdone else (scan op ne <| take right <| fst <| unzip arr) ++ almostdone
   in result :> [n]i32
 
--- fucheck segscan
-let gen_segscan : gen ([](i32,bool)) = \size rng ->
-  let (rng, sizes) = getsizes size rng 1
-  let arrgen = arbitraryarr (arbitrarytuple arbitraryi32 arbitrarybool) sizes[0]
-  in arrgen size rng
+-- fucheck segscan 1
+let gen_segscan : i32 -> gen ([](i32,bool)) =
+  arbitraryarr (arbitrarytuple arbitraryi32 arbitrarybool)
 
 let prop_segscan [n] (arr : ([n](i32,bool))) : bool =
   crude_segscan (+) 0 arr == segscan (+) 0 arr
