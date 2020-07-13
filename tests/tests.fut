@@ -18,6 +18,15 @@
 import "../src/futs//fucheck"
 open Fucheck
 
+type maybe 'a = #just a | #nothing
+let maybegen 't elmgen : gen (maybe t) =
+  oneof2 (transformgen (\i -> #just i) elmgen)
+         (constgen #nothing)
+
+let show_maybe 't (elmshow : t -> []u8) (input : maybe t) : []u8 =
+  match input
+  case (#just i) -> "#just " ++ elmshow i
+  case #nothing -> "#nothing"
 
 -- fucheck pass
 entry gen_pass = arbitraryi32
@@ -61,7 +70,6 @@ entry show_bool = showbool
 
 entry state_bool : state = { maxtests = 55 , maxsize = 101, maxdiscardedratio = 100 }
 
-
 -- fucheck cond
 
 entry state_cond = { maxtests = 157 , maxsize = 131, maxdiscardedratio = 100 }
@@ -76,7 +84,6 @@ entry show_cond = show2tuple showdecimali32 showdecimali32
 
 entry labels_cond ((i,j): (i32,i32)) : []u8 =
   "Difference of at least " ++ (showdecimali32 ((j - i) / 10 * 10))
-
 
 -- fucheck zip 1
 let gen_zip arrsize : gen ([arrsize]i32, [arrsize]i32) = \size rng ->
@@ -112,16 +119,6 @@ entry prop_failsize [n] (arr : [n]i32) : bool =
   length arr < 10
 
 entry show_failsize = show_array showdecimali32
-
-type maybe 'a = #just a | #nothing
-let maybegen 't elmgen : gen (maybe t) =
-  oneof2 (transformgen (\i -> #just i) elmgen)
-         (constgen #nothing)
-
-let show_maybe 't (elmshow : t -> []u8) (input : maybe t) : []u8 =
-  match input
-  case (#just i) -> "#just " ++ elmshow i
-  case #nothing -> "#nothing"
 
 -- fucheck justfail
 entry gen_justfail = maybegen arbitraryi32
