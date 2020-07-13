@@ -150,11 +150,8 @@ main = do
 
   -- Quit if only meant to write test program to file
   case action args of
-    SaveFile (Just file) -> do
-      writeFile file alteredprogram
-      exitSuccess
-    SaveFile Nothing -> do
-      writeFile tmpFutFile alteredprogram
+    PrintPreprocessed -> do
+      putStrLn alteredprogram
       exitSuccess
     Run -> do
       writeFile tmpFutFile alteredprogram

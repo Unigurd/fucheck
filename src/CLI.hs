@@ -53,7 +53,7 @@ gccArgs args tmpFile =
     OpenCL -> [tmpFile ++ ".c", "-lOpenCL", "-o", tmpFile ++ ".so", "-fPIC", "-shared"]
 
 -- Whether to save preprocessed program or test it
-data Action = Run | SaveFile (Maybe String) deriving Eq
+data Action = Run | PrintPreprocessed deriving Eq
 
 -- CLI args
 data Args = Args { file       :: String
@@ -144,10 +144,8 @@ testFilterFlag2testFilter ["--last",numStr] =
                      ++ numStr ++ " is negative"
 testFilterFlag2testFilter _ = Left stdErrMsg
 
-actionFlag2action ["--out"]      = Right $ SaveFile Nothing
-actionFlag2action ["-o"]         = Right $ SaveFile Nothing
-actionFlag2action ["--out",file] = Right $ SaveFile $ Just file
-actionFlag2action ["-o", file]   = Right $ SaveFile $ Just file
+actionFlag2action ["--out"]      = Right PrintPreprocessed
+actionFlag2action ["-o"]         = Right PrintPreprocessed
 actionFlag2action ["--run"]      = Right Run
 actionFlag2action _ = Left stdErrMsg
 
