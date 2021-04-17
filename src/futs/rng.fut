@@ -24,12 +24,12 @@ module dist = uniform_int_distribution i64 r
 module Rng = {
   open Types
 
- type rng = r.rng
+  type rng = r.rng
 
   let snd (_,b) = b
   let fsnd f (x, y) = (x, f y)
 
-  let rng_from_seed seed = r.rng_from_seed [seed]
+  entry rng_from_seed seed = r.rng_from_seed [seed]
   let split_rng n rng = r.split_rng n rng
 
   let rand_i64 ((low,high) : (i64,i64)) (rng : rng) : (rng, i64) =
@@ -63,11 +63,11 @@ module Rng = {
   let rand_bool ((low,high) : (bool,bool)) (rng : rng) : (rng, bool) =
     fsnd bool.i64 <| dist.rand (i64.bool low, i64.bool high) rng
 
-  let getsizes (maxsize : size) (rng : rng) (num : i32) : (rng, [num]i32) =
+  let getsizes (maxsize : size) (rng : rng) (num : i64) : (rng, [num]i64) =
     let rngs =
       r.split_rng num rng
     let (rngs, sizes) =
-      unzip (map (\rng -> rand_i32 (0,maxsize) rng) rngs)
+      unzip (map (\rng -> rand_i64 (0,maxsize) rng) rngs)
     in (r.join_rng rngs, sizes)
 
 }

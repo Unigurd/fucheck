@@ -66,7 +66,8 @@ let glp (factor : u64) (n : u64) =
 
   let digify (base : u64) (n : u64) : []u64 =
   let digitNr = glp base n
-  let digitArr = reverse <| map u64.i32 <| iota <| i32.u64 digitNr
+  let digitArr = i64.u64 digitNr |> iota |> map u64.i64 |> reverse
+
   let (digits, _) =
     loop (digits, remainder) = ([], n)
     for i in digitArr
@@ -141,7 +142,7 @@ let glp (factor : u64) (n : u64) =
   let surroundwith prefix postfix str = prefix ++ str ++ postfix
 
   let show_collection prefix separator postfix stringify strs =
-    surroundwith prefix postfix <| separatewith separator stringify strs
+    separatewith separator stringify strs |> surroundwith prefix postfix
 
   let showtuple 'elm1 'elm2
                 (show1 : elm1 -> []u8)
@@ -198,7 +199,7 @@ let show_array5d 't (stringify : t -> []u8) (arr : [][][][][]t) : []u8 =
   let outer = show_array inner
   in  outer arr
 
-let squarebracket n = "[" ++ showdecimali32 n ++ "]"
+let squarebracket n = "[" ++ showdecimali64 n ++ "]"
 let show_sizes_1d 'elm [n]
             (_ : [n]elm)
             : []u8 =
@@ -229,6 +230,3 @@ let show_array4d_crash stringify arr : []u8 =
   let outer = show_array inner
   in  outer arr
 }
-
-
-

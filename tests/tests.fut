@@ -15,8 +15,12 @@
 --     You should have received a copy of the GNU General Public License
 --     along with Fucheck.  If not, see <https://www.gnu.org/licenses/>.
 
+import "lib/github.com/diku-dk/cpprandom/random"
+module r = minstd_rand
 import "../src/futs//fucheck"
 open Fucheck
+
+--entry rng_from_seed seed = r.rng_from_seed [seed]
 
 type maybe 'a = #just a | #nothing
 let maybegen 't elmgen : gen (maybe t) =
@@ -31,7 +35,6 @@ let show_maybe 't (elmshow : t -> []u8) (input : maybe t) : []u8 =
 -- fucheck pass
 entry gen_pass = arbitraryi32
 
-  --(arbitrarytuple arbitraryi32 arbitraryi32) size <| rng_from_seed seed
 entry prop_pass (i : i32) : bool = i == i
 
 entry show_pass = showdecimali32
@@ -72,7 +75,8 @@ entry state_bool : state = { maxtests = 55 , maxsize = 101, maxdiscardedratio = 
 
 -- fucheck cond
 
-entry state_cond = { maxtests = 157 , maxsize = 131, maxdiscardedratio = 100 }
+entry state_cond :{maxtests: i32, maxsize: i64, maxdiscardedratio: i32} =
+  { maxtests = 157 , maxsize = 131, maxdiscardedratio = 100 }
 
 entry gen_cond = arbitrarytuple arbitraryi32 arbitraryi32
 
@@ -179,7 +183,7 @@ let prop_show_3d_arr (arr : [][][]i32) =
 
 let show_show_3d_arr = show_array3d showdecimali32
 
- -- fucheck show_4d_arr 4
+-- fucheck show_4d_arr 4
 let gen_show_4d_arr = arbitrary4darr arbitraryi32
 
 let prop_show_4d_arr (arr : [][][][]i32) =

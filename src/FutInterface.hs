@@ -27,8 +27,10 @@ module FutInterface ( Futhark_Context
                     , mkShow
                     , getFutState
                     , futGetStateField
+                    , futGetStateFieldLong
                     , Ptr
                     , CInt(CInt)
+                    , CLong(CLong)
                     , CBool(CBool)
                     , Stage(..)
                     , stage2str
@@ -36,7 +38,7 @@ module FutInterface ( Futhark_Context
 
 import Foreign.Ptr (Ptr, FunPtr)--,castFunPtrToPtr,nullFunPtr)
 import Data.Word (Word8)
-import Foreign.C.Types (CInt(CInt), CBool(CBool))
+import Foreign.C.Types (CInt(CInt),CLong(CLong), CBool(CBool))
 import Control.Monad.Trans.Except(ExceptT(ExceptT), runExceptT,throwE)
 import Foreign.Storable (Storable, peek)
 import Foreign.Marshal.Alloc (alloca)
@@ -77,19 +79,19 @@ type ValuesType =  Ptr Futhark_Context
 
 type ArbitraryType =  Ptr Futhark_Context
                    -> Ptr (Ptr FutharkTestData)
-                   -> CInt               -- size
+                   -> CLong               -- size
                    -> CInt               -- seed
                    -> IO CInt
 
 type PropertyType =  Ptr Futhark_Context
                     -> Ptr CBool
-                    -> CInt
+                    -> CLong
                     -> CInt
                     -> IO CInt
 
 type ShowType =  Ptr Futhark_Context
                 -> Ptr (Ptr Futhark_u8_1d)
-                -> CInt
+                -> CLong
                 -> CInt
                 -> IO CInt
 
@@ -142,9 +144,14 @@ getFutState dl ctx name = do
 -- make static ?
 foreign import ccall "dynamic"
   mkGetStateField :: FunPtr (Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt)
-                          -> Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt
+                  -> Ptr Futhark_Context -> Ptr CInt -> Ptr FutState -> IO CInt
+
+foreign import ccall "dynamic"
+  mkGetStateFieldLong :: FunPtr (Ptr Futhark_Context -> Ptr CLong -> Ptr FutState -> IO CInt)
+                      -> Ptr Futhark_Context -> Ptr CLong -> Ptr FutState -> IO CInt
 
 -- make static ?
+futGetStateField :: DL.DL -> Ptr Futhark_Context -> Ptr FutState -> String -> IO CInt
 futGetStateField dl ctx futState field = do
   fieldfun <- DL.dlsym dl ("futhark_entry_" ++ field)
   eitherfield <- runExceptT $ haskify (mkGetStateField fieldfun) ctx GetState futState
@@ -152,6 +159,16 @@ futGetStateField dl ctx futState field = do
     Right field -> return field
     Left errVal ->
       error $ "Failed getting " ++ field ++ " with exit code " ++ show (exitCode errVal)
+
+futGetStateFieldLong :: DL.DL -> Ptr Futhark_Context -> Ptr FutState -> String -> IO CLong
+futGetStateFieldLong dl ctx futState field = do
+  fieldfun <- DL.dlsym dl ("futhark_entry_" ++ field)
+  eitherfield <- runExceptT $ haskifyLong (mkGetStateFieldLong fieldfun) ctx GetState futState
+  case eitherfield of
+    Right field -> return field
+    Left errVal ->
+      error $ "Failed getting " ++ field ++ " with exit code " ++ show (exitCode errVal)
+
 
 -- Helper functions for marshalling arrays
 -- Get size of array
@@ -226,6 +243,19 @@ haskify :: Storable out
         -> input
         -> ExceptT Stage IO out
 haskify c_fun ctx stage input =
+  ExceptT $ alloca $ (\outPtr -> do
+    exitcode <- c_fun ctx outPtr input
+    if exitcode == 0
+    then (return . Right) =<< peek outPtr
+    else return $ Left $ stage exitcode)
+
+haskifyLong :: Storable out
+            => (Ptr Futhark_Context -> Ptr out -> input -> IO CInt)
+            -> Ptr Futhark_Context
+            -> (CInt -> Stage)
+            -> input
+            -> ExceptT Stage IO out
+haskifyLong c_fun ctx stage input =
   ExceptT $ alloca $ (\outPtr -> do
     exitcode <- c_fun ctx outPtr input
     if exitcode == 0

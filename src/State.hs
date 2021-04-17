@@ -28,48 +28,51 @@ module State ( State(..)
              ) where
 
 import Control.Monad.Trans.Except(ExceptT(ExceptT),runExceptT)
-import System.Random (randomIO, StdGen, newStdGen, next, RandomGen)
+import System.Random (randomIO, StdGen, newStdGen, genWord32, RandomGen)
 import qualified System.Posix.DynamicLinker as DL
 import qualified Data.Map.Strict as M
 
 import qualified ParseFut as PF
 import qualified FutInterface as FI
-import FutInterface (CInt, Ptr, FutharkTestData, Futhark_Context, Stage(..))
+import FutInterface (CInt, CLong, Ptr, FutharkTestData, Futhark_Context, Stage(..))
 
 -- State maintained during testing of a single test
 data State = MkState
   { stateTestName             :: String
-  , property                  :: CInt -> CInt -> ExceptT Stage IO Bool
-  , condition                 :: Maybe (CInt -> CInt -> ExceptT Stage IO Bool)
-  , shower                    :: Maybe (CInt -> CInt -> ExceptT Stage IO String)
-  , labeler                   :: Maybe (CInt -> CInt -> ExceptT Stage IO String)
+  , property                  :: CLong -> CInt -> ExceptT Stage IO Bool
+  , condition                 :: Maybe (CLong -> CInt -> ExceptT Stage IO Bool)
+  , shower                    :: Maybe (CLong -> CInt -> ExceptT Stage IO String)
+  , labeler                   :: Maybe (CLong -> CInt -> ExceptT Stage IO String)
   , labels                    :: Maybe (M.Map String CInt)
   , numSuccessTests           :: CInt
   , maxSuccessTests           :: CInt
   , numDiscardedTests         :: CInt
   , numRecentlyDiscardedTests :: CInt
   , maxDiscardedRatio         :: CInt
-  , maxSize                   :: CInt
-  , computeSize               :: CInt -> CInt
+  , maxSize                   :: CLong
+  , computeSize               :: CLong -> CLong
   , randomSeed                :: StdGen
   }
 
 instance Show State where
   show state = show (size state) ++ " " ++ show (getSeed state)
 
-size :: State -> CInt
+size :: State -> CLong
 size state = (computeSize state (fromIntegral $ numSuccessTests state))
 
+-- Should this be fst . nextState?
 getSeed :: State -> CInt
-getSeed = toEnum . fst . next . randomSeed
+getSeed = fst. nextState
+-- getSeed = toEnum . (`mod` fromEnum (maxBound :: CInt)) . fst . next . randomSeed
 
-nextGen = snd . next . randomSeed
+nextGen :: State -> StdGen
+nextGen = snd . genWord32 . randomSeed
 
 nextState :: State -> (CInt, State)
 nextState state = (cInt, newState)
   where
-    (int,newGen) = next $ randomSeed state
-    cInt         = toEnum int
+    (int,newGen) = genWord32 $ randomSeed state
+    cInt         = (toEnum . fromEnum) int
     newState     = state {randomSeed = newGen}
 
 runProp state =
@@ -108,9 +111,9 @@ mkDefaultState dl ctx testNames = do
     if PF.stateFound testNames
     then do
       state <- FI.getFutState dl ctx $ PF.stateName testNames
-      mt    <- FI.futGetStateField dl ctx state "maxtests"
-      ms    <- FI.futGetStateField dl ctx state "maxsize"
-      mdr   <- FI.futGetStateField dl ctx state "maxdiscardedratio"
+      mt    <- FI.futGetStateField     dl ctx state "maxtests"
+      ms    <- return 1 -- <- FI.futGetStateFieldLong dl ctx state "maxsize"
+      mdr   <- FI.futGetStateField     dl ctx state "maxdiscardedratio"
       return (mt,ms,mdr)
     else return (100, 100, 100) -- move defaults to fut ?
   return $ MkState

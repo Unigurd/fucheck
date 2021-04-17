@@ -17,7 +17,7 @@
 
 module Types = {
 
-  type size              = i32
+  type size              = i64
   type maxtests          = i32
   type maxsize           = size
   type maxdiscardedratio = i32

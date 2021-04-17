@@ -74,7 +74,7 @@ combineFutFuns funs = result
     name = ffTestName funs
     typecheck pred funname funtype  =
       if pred funs then
-        "let typecheck_" ++ name ++ "_" ++ funname ++" (size :i32) (seed :i32) : " ++ funtype
+        "let typecheck_" ++ name ++ "_" ++ funname ++" (size : i64) (seed : i32) : " ++ funtype
         ++ " = " ++ funname ++ "_" ++ name ++ " (gen_" ++ name ++ " size seed)"
       else ""
     prop_comb   = typecheck propFound "prop" "bool"
@@ -101,7 +101,7 @@ sizeIndexes n = sizeIndexes (n-1) ++ "sizes[" ++ show (n-1) ++ "] "
 -- Should generate unique names
 -- Should not be dependent on Open Fucheck
 entryFun test rettype f =
-  "entry entry_" ++ f test ++ " (size : i32) (seed : i32) : " ++ rettype ++ " =\n"
+  "entry entry_" ++ f test ++ " (size : i64) (seed : i32) : " ++ rettype ++ " =\n"
   ++ "  let rng = rng_from_seed seed\n"
   ++ "  let (rng, sizes) = getsizes size rng " ++ show (numSizes test) ++ "\n"
   ++ "  in " ++ f test ++ " (" ++ arbName test ++ sizeIndexes (numSizes test) ++ "rng).1"

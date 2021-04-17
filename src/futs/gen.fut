@@ -63,7 +63,7 @@ module Gen = {
   let resize 'elm (newsize : size) (oldgen : gen elm) : gen elm =
     (\_ rng -> oldgen newsize rng)
 
-  let scale 'elm (fun : i32 -> i32) (oldgen : gen elm) : gen elm =
+  let scale 'elm (fun : i64 -> i64) (oldgen : gen elm) : gen elm =
     (\size rng -> oldgen (fun size) rng)
 
   let constgen 't (const : t) : gen t =
@@ -141,7 +141,7 @@ module Gen = {
 
   let elements 'elm [n] (elms : [n]elm) : gen elm =
     (\_ rng ->
-       let (rng, i) = rand_i32 (0,n-1) rng
+       let (rng, i) = rand_i64 (0,n-1) rng
        in (rng, elms[i]))
 
 
@@ -149,43 +149,55 @@ module Gen = {
 
   let arbitraryi8   : gen i8   =
     sized (\n ->
-             let n' = i8.i32 n
-             in choose_i8 (if n <= i32.i8 i8.highest
+             let n' = i8.i64 n
+             in choose_i8 (if n <= i64.i8 i8.highest
                            then (-n',n')
                            else (i8.lowest, i8.highest)))
 
   let arbitraryi16   : gen i16   =
     sized (\n ->
-             let n' = i16.i32 n
-             in choose_i16 (if n <= i32.i16 i16.highest
+             let n' = i16.i64 n
+             in choose_i16 (if n <= i64.i16 i16.highest
                             then (-n',n')
                             else (i16.lowest, i16.highest)))
 
   let arbitraryi32  : gen i32  =
-    sized (\n -> choose_i32 (if n < i32.highest
-                             then (-n,n)
-                             else (i32.lowest, i32.highest)))
+    sized (\n ->
+             let n' = i32.i64 n
+             in choose_i32 (if n <= i64.i32 i32.highest
+                            then (-n',n')
+                            else (i32.lowest, i32.highest)))
+
+    -- sized (\n -> choose_i32 (if n < i32.highest
+    --                          then (-n,n)
+    --                          else (i32.lowest, i32.highest)))
 
   let arbitraryi64  : gen i64  =
-    sized (\n ->
-             let n' = i64.i32 n
-             in choose_i64 (-n',n'))
+    -- sized (\n ->
+    --          let n' = i64.i32 n
+    --          in choose_i64 (-n',n'))
+    sized (\n -> choose_i64 (if n < i64.highest
+                             then (-n,n)
+                             else (i64.lowest, i64.highest)))
 
   let arbitraryu8  : gen u8  =
     sized (\n ->
-             let n' = u8.i32 <| i32.min n <| i32.u8 u8.highest
+             let n' = u8.i64 <| i64.min n <| i64.u8 u8.highest
              in choose_u8 (0, n'))
 
   let arbitraryu16  : gen u16  =
     sized (\n ->
-             let n' = u16.i32 <| i32.min n <| i32.u16 u16.highest
+             let n' = u16.i64 <| i64.min n <| i64.u16 u16.highest
              in choose_u16 (0, n'))
 
   let arbitraryu32  : gen u32  =
-    sized (\n -> choose_u32 (0, u32.i32 n))
+    sized (\n ->
+             let n' = u32.i64 <| i64.min n <| i64.u32 u32.highest
+             in choose_u32 (0, n'))
+    --sized (\n -> choose_u32 (0, u32.i32 n))
 
   let arbitraryu64  : gen u64  =
-    sized (\n -> choose_u64 (0, u64.i32 n))
+    sized (\n -> choose_u64 (0, u64.i64 n))
 
   let arbitrary_f32_infty : gen f32 =
     elements [f32.from_bits 0x7f800000, f32.from_bits 0xff800000]
@@ -204,16 +216,15 @@ module Gen = {
 
   let arbitrary_f32_normal : gen f32 =
     \size rng ->
-      let (rng, x) = rand_u32 (0,u32.min 0xff (u32.i32 size)) rng
+      let (rng, x) = rand_u32 (0,u32.min 0xff (u32.i64 size)) rng --is u32.i64 correct?
       let (rng, y) = rand_u32 (0, 0x007fffff) rng
       in (rng, f32.from_bits <| (x << 23) & y)
 
   let arbitrary_f32 : gen f32 =
   let precision = 9999999999999
   in (\n rng->
-        let n' = i64.i32 n
         let (rng, b) = rand_i64 (1,precision) rng
-        let (rng, a) = rand_i64 ((-n') * b, n' * b) rng
+        let (rng, a) = rand_i64 ((-n) * b, n * b) rng
         in (rng, f32.i64 a % f32.i64 b))
 
   let arbitrary_f64_infty : gen f64 =
@@ -233,16 +244,15 @@ module Gen = {
 
   let arbitrary_f64_normal : gen f64 =
     \size rng ->
-      let (rng, a) = rand_u64 (0,u64.min 0x7ff (u64.i32 size)) rng
+      let (rng, a) = rand_u64 (0,u64.min 0x7ff (u64.i64 size)) rng -- is u64.i64 correct?
       let (rng, b) = rand_u64 (0, 0xfffffffffffff) rng
       in (rng, f64.from_bits <| (a << 52) & b)
 
   let arbitrary_f64 : gen f64 =
   let precision = 9999999999999
   in (\n rng ->
-        let n' = i64.i32 n
         let (rng, b) = rand_i64 (1,precision) rng
-        let (rng, a) = rand_i64 ((-n') * b, n' * b) rng
+        let (rng, a) = rand_i64 ((-n) * b, n * b) rng
         in (rng, f64.i64 a % f64.i64 b))
 
   let arbitrarytuple 'a 'b (arbitrarya : gen a) (arbitraryb : gen b) : gen (a,b) =
