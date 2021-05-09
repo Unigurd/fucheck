@@ -20,7 +20,7 @@ module r = minstd_rand
 import "../src/futs//fucheck"
 open Fucheck
 
---entry rng_from_seed seed = r.rng_from_seed [seed]
+entry rng_from_seed seed = r.rng_from_seed [seed]
 
 type maybe 'a = #just a | #nothing
 let maybegen 't elmgen : gen (maybe t) =

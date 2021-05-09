@@ -35,7 +35,7 @@ extra-source-files:  CHANGELOG.md
 
 executable fucheck
   main-is:             Main.hs
-  other-modules:       FutInterface, Message, Result, Tests, State, ParseFut, WriteFut, CLI
+  other-modules:       FutInterface, Message, Result, Tests, State, ParseFut, WriteFut, CLI, FutServer
   -- other-extensions:
   build-depends:       base
                      , ghc
@@ -49,6 +49,12 @@ executable fucheck
                      , unix
                      , containers
                      , QuickCheck
+                     , parsec
+                     , unordered-containers
+                     , conduit
+                     , mono-traversable
+
+  ghc-options: -threaded
 
   -- build-depends:       base==4.14.0.0
   --                    , ghc==8.10.1
